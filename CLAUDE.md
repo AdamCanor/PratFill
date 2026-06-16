@@ -64,6 +64,15 @@ Pure JS package changes (no native code) do not require a prebuild.
 - `date` is ISO string without timezone — treat as local date
 - `normalizeDate()` in HomeScreen converts `date` → `DD.MM.YYYY` for matching
 
+### `getReportedData()` — GET /api/Attendance/GetReportedData
+Returns current user info: `{ firstName, lastName, commander: bool, reported: bool, mainStatusReported, secondaryStatusReported, ... }`
+
+### `loginCommander()` — POST /api/account/loginCommander
+Must be called before GetGroups. Returns `{ isUserAuth, isCommanderAuth, error }`.
+
+### `getGroups(groupCode)` — GET /api/attendance/GetGroups?groupcode=
+Returns `{ firstGroup: { users: [...] }, ... }`. Each user: `{ mi, firstName, lastName, reportedMainCode, reportedMainName, reportedSecondaryCode, reportedSecondaryName, createdToday, isFutureReport, groupCode }`.
+
 ## Cookie library
 Uses `@preeternal/react-native-cookie-manager` — a drop-in replacement for the deprecated `@react-native-cookies/cookies`. Same API (`CookieManager.get(domain)`, `CookieManager.clearAll()`). No patch needed.
 

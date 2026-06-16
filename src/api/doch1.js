@@ -130,3 +130,15 @@ export async function getSettings() {
 export async function saveSettings(settings) {
   await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
+
+export async function getReportedData() {
+  return request('/api/Attendance/GetReportedData');
+}
+
+export async function loginCommander() {
+  return request('/api/account/loginCommander', { method: 'POST' });
+}
+
+export async function getGroups(groupCode = '') {
+  return request(`/api/attendance/GetGroups?groupcode=${encodeURIComponent(groupCode)}`);
+}

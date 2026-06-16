@@ -20,6 +20,9 @@ import {
   getSettings,
   clearCookies,
   AuthError,
+  getReportedData,
+  loginCommander,
+  getGroups,
 } from '../api/doch1';
 import { getSecondaryLabel, STATUSES } from '../data/statuses';
 import { getUpcomingDates, monthsToQuery } from '../utils/dates';
@@ -70,6 +73,50 @@ const SEGMENT_OPTIONS = [
   { label: 'אחר', mainCode: null, secondaryCode: null },
 ];
 
+// ── TeamUserRow ───────────────────────────────────────────────────────────
+
+function TeamUserRow({ user }) {
+  const reported = !!user.reportedMainCode;
+  const statusLabel = user.reportedSecondaryName || user.reportedMainName || 'לא מדווח';
+  return (
+    <View style={teamStyles.row}>
+      <View style={teamStyles.rowLeft}>
+        <MaterialCommunityIcons
+          name={reported ? 'check-circle' : 'circle-outline'}
+          size={20}
+          color={reported ? colors.success : colors.textMuted}
+        />
+      </View>
+      <View style={teamStyles.rowCenter}>
+        <Text style={teamStyles.name}>{user.firstName} {user.lastName}</Text>
+        <Text style={[teamStyles.status, reported ? teamStyles.statusReported : teamStyles.statusMissing]}>
+          {statusLabel}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+const teamStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  rowLeft: { marginEnd: spacing.sm },
+  rowCenter: { flex: 1 },
+  name: { color: colors.text, fontSize: 15, fontWeight: '600', textAlign: 'right' },
+  status: { fontSize: 12, textAlign: 'right', marginTop: 2 },
+  statusReported: { color: colors.success },
+  statusMissing: { color: colors.textMuted },
+});
+
 // ── component ─────────────────────────────────────────────────────────────
 
 export default function HomeScreen({ navigation }) {
@@ -77,7 +124,8 @@ export default function HomeScreen({ navigation }) {
   const [filling, setFilling] = useState(false);
   const [reports, setReports] = useState([]);
   const [settings, setSettings] = useState(null);
-  const [userId, setUserId] = useState(null);
+  const [userName, setUserName] = useState(null);
+  const [isCommander, setIsCommander] = useState(false);
 
   // new UI state
   const [activeTab, setActiveTab] = useState('personal');
@@ -86,13 +134,25 @@ export default function HomeScreen({ navigation }) {
   const [modalMain, setModalMain] = useState(null);
   const [segLoading, setSegLoading] = useState({});
 
+  // team tab state
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [teamUsers, setTeamUsers] = useState([]);
+  const [teamError, setTeamError] = useState(null);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const s = await getSettings();
       setSettings(s);
-      if (s?.userId || s?.id || s?.personnelNumber) {
-        setUserId(s.userId || s.id || s.personnelNumber);
+
+      try {
+        const userData = await getReportedData();
+        if (userData?.firstName) {
+          setUserName(`${userData.firstName} ${userData.lastName}`.trim());
+        }
+        setIsCommander(!!userData?.commander);
+      } catch (_) {
+        // non-fatal — top bar name is optional
       }
 
       const upcoming = getUpcomingDates(7);
@@ -176,6 +236,24 @@ export default function HomeScreen({ navigation }) {
       Alert.alert('שגיאה בשליחה', err.message);
     } finally {
       setFilling(false);
+    }
+  };
+
+  const loadTeam = async () => {
+    setTeamLoading(true);
+    setTeamError(null);
+    try {
+      await loginCommander();
+      const data = await getGroups();
+      setTeamUsers(data?.firstGroup?.users || []);
+    } catch (err) {
+      if (err instanceof AuthError) {
+        navigation.replace('Login');
+        return;
+      }
+      setTeamError(err.message);
+    } finally {
+      setTeamLoading(false);
     }
   };
 
@@ -334,8 +412,8 @@ export default function HomeScreen({ navigation }) {
 
       {/* Top bar */}
       <View style={styles.topBar}>
-        {userId ? (
-          <Text style={styles.userIdText}>{userId}</Text>
+        {userName ? (
+          <Text style={styles.userIdText}>{userName}</Text>
         ) : (
           <View />
         )}
@@ -375,7 +453,10 @@ export default function HomeScreen({ navigation }) {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'team' && styles.tabActive]}
-          onPress={() => setActiveTab('team')}
+          onPress={() => {
+            setActiveTab('team');
+            if (teamUsers.length === 0 && !teamLoading) loadTeam();
+          }}
         >
           <Text style={[styles.tabText, activeTab === 'team' && styles.tabTextActive]}>
             החיילים שלי
@@ -384,8 +465,36 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       {activeTab === 'team' ? (
-        <View style={styles.teamPlaceholder}>
-          <Text style={styles.teamPlaceholderText}>בקרוב</Text>
+        <View style={{ flex: 1 }}>
+          {teamLoading ? (
+            <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.lg }} />
+          ) : teamError ? (
+            <View style={styles.teamPlaceholder}>
+              <Text style={styles.teamErrorText}>{teamError}</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={loadTeam}>
+                <Text style={styles.retryBtnText}>נסה שוב</Text>
+              </TouchableOpacity>
+            </View>
+          ) : !isCommander && teamUsers.length === 0 ? (
+            <View style={styles.teamPlaceholder}>
+              <MaterialCommunityIcons name="shield-off-outline" size={40} color={colors.textMuted} />
+              <Text style={styles.teamPlaceholderText}>אין הרשאת מפקד</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={teamUsers}
+              keyExtractor={(item) => String(item.mi)}
+              renderItem={({ item }) => <TeamUserRow user={item} />}
+              contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}
+              ListEmptyComponent={
+                <View style={styles.teamPlaceholder}>
+                  <Text style={styles.teamPlaceholderText}>אין חיילים בקבוצה</Text>
+                </View>
+              }
+              onRefresh={loadTeam}
+              refreshing={teamLoading}
+            />
+          )}
         </View>
       ) : (
         <>
@@ -538,8 +647,11 @@ const styles = StyleSheet.create({
   tabTextActive: { color: colors.accent, fontWeight: '600' },
 
   // team placeholder
-  teamPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  teamPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   teamPlaceholderText: { color: colors.textMuted, fontSize: 16 },
+  teamErrorText: { color: colors.danger, fontSize: 14, textAlign: 'center', paddingHorizontal: spacing.md },
+  retryBtn: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
+  retryBtnText: { color: colors.accent, fontSize: 14 },
 
   // summary row
   summaryRow: {

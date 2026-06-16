@@ -84,7 +84,14 @@ Two workflows:
 Both skip `expo prebuild` (android/ is committed) and use the debug keystore (sufficient for sideloading).
 
 ## Branch & PR workflow
-- Development branch: `dev`
-- Push commits to `dev` — CI builds APK as artifact.
-- When ready to release: open PR `dev` → `main`, merge it — CI publishes a GitHub Release automatically.
-- Merge via GitHub MCP (`mcp__github__merge_pull_request`, owner: `AdamCanor`, repo: `PratFill`).
+Three branches, two gates:
+
+| Branch | CI | Purpose |
+|---|---|---|
+| `dev` | none | All development work goes here |
+| `preprod` | `build-apk.yml` | Test builds — triggers on every merge from dev |
+| `main` | `release.yml` | Stable releases — triggers GitHub Release on every merge from preprod |
+
+Flow: `dev` → merge → `preprod` (test APK built) → test on device → merge → `main` (GitHub Release published).
+
+Merge via GitHub MCP (`mcp__github__merge_pull_request`, owner: `AdamCanor`, repo: `PratFill`).

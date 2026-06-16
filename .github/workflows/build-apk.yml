@@ -45,7 +45,7 @@ jobs:
 
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --parallel -Pandroid.enableMinifyInReleaseBuilds=true
+        run: ./gradlew assembleDebug --no-daemon --parallel
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

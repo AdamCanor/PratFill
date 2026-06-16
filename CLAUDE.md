@@ -77,13 +77,14 @@ Returns `{ firstGroup: { users: [...] }, ... }`. Each user: `{ mi, firstName, la
 Uses `@preeternal/react-native-cookie-manager` — a drop-in replacement for the deprecated `@react-native-cookies/cookies`. Same API (`CookieManager.get(domain)`, `CookieManager.clearAll()`). No patch needed.
 
 ## CI (GitHub Actions)
-Workflow: `.github/workflows/build-apk.yml`
-- Builds a **debug APK** (`assembleDebug`) — no signing needed for sideloading.
-- Skips `expo prebuild` (android/ is committed).
-- `npm ci` always runs (caches `~/.npm` for speed).
-- Artifact: `android/app/build/outputs/apk/debug/app-debug.apk`
+Two workflows:
+- `build-apk.yml` — triggers on `dev` push and PRs into `main`. Builds a **release APK** (standalone, no Metro needed). Artifact: `android/app/build/outputs/apk/release/app-release.apk`
+- `release.yml` — triggers on `main` push. Builds release APK and publishes a **GitHub Release** tagged `v{version}-{sha}`.
+
+Both skip `expo prebuild` (android/ is committed) and use the debug keystore (sufficient for sideloading).
 
 ## Branch & PR workflow
-- Development branch: `claude/jolly-ride-ceaez3`
-- Push commits there — open PRs update automatically.
+- Development branch: `dev`
+- Push commits to `dev` — CI builds APK as artifact.
+- When ready to release: open PR `dev` → `main`, merge it — CI publishes a GitHub Release automatically.
 - Merge via GitHub MCP (`mcp__github__merge_pull_request`, owner: `AdamCanor`, repo: `PratFill`).

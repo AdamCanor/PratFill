@@ -1,15 +1,14 @@
-name: Build Android APK
+name: Release
 
 on:
   push:
-    branches: [dev]
-  pull_request:
     branches: [main]
-  workflow_dispatch: {}
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -49,8 +48,19 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon --parallel
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v5
-        with:
-          name: pratfill-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
+      - name: Get release tag
+        id: tag
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          SHA=$(git rev-parse --short HEAD)
+          echo "tag=v${VERSION}-${SHA}" >> $GITHUB_OUTPUT
+          echo "title=v${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.tag.outputs.tag }}" \
+            android/app/build/outputs/apk/release/app-release.apk \
+            --title "${{ steps.tag.outputs.title }}" \
+            --generate-notes

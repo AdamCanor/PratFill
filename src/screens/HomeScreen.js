@@ -7,29 +7,92 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  Modal,
+  I18nManager,
+  ScrollView,
+  StatusBar,
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   getFutureReports,
   insertFutureReport,
   deleteFutureReport,
   getSettings,
+  clearCookies,
   AuthError,
 } from '../api/doch1';
 import { getSecondaryLabel, STATUSES } from '../data/statuses';
 import { getUpcomingDates, monthsToQuery, toApiDate } from '../utils/dates';
 import { colors, spacing, radius } from '../theme';
 
+I18nManager.forceRTL(true);
+
+const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+function getDayName(date) {
+  return DAY_NAMES[date.getDay()];
+}
+
+function formatDisplayDate(apiDate) {
+  // apiDate is DD.MM.YYYY — show DD.MM only
+  const parts = apiDate.split('.');
+  return `${parts[0]}.${parts[1]}`;
+}
+
+function parseDateFromApiDate(apiDate) {
+  const [dd, mm, yyyy] = apiDate.split('.');
+  return new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
+}
+
+// ── preserve existing logic ────────────────────────────────────────────────
+
+function normalizeDate(report) {
+  return report?.futureReportDate || report?.date || report?.FutureReportDate || '';
+}
+
+function describeReport(report) {
+  const mainCode = report?.mainCode || report?.MainCode;
+  const secCode = report?.secondaryCode || report?.SecondaryCode;
+  const sec = getSecondaryLabel(mainCode, secCode);
+  return sec ? sec.statusDescription : `${mainCode}/${secCode}`;
+}
+
+function describeDefault(settings) {
+  const main = STATUSES.find((s) => s.statusCode === settings.mainCode);
+  const sec = getSecondaryLabel(settings.mainCode, settings.secondaryCode);
+  if (!main || !sec) return 'לא הוגדר';
+  return `${main.statusDescription} - ${sec.statusDescription}`;
+}
+
+const SEGMENT_OPTIONS = [
+  { label: 'בסיס', mainCode: '01', secondaryCode: '01' },
+  { label: 'חופש', mainCode: '04', secondaryCode: '01' },
+  { label: 'אחר', mainCode: null, secondaryCode: null },
+];
+
+// ── component ─────────────────────────────────────────────────────────────
+
 export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [filling, setFilling] = useState(false);
-  const [reports, setReports] = useState([]); // upcoming reports across queried months
+  const [reports, setReports] = useState([]);
   const [settings, setSettings] = useState(null);
+  const [userId, setUserId] = useState(null);
+
+  // new UI state
+  const [activeTab, setActiveTab] = useState('personal');
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalDate, setModalDate] = useState(null);
+  const [modalMain, setModalMain] = useState(null);
+  const [segLoading, setSegLoading] = useState({});
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const s = await getSettings();
       setSettings(s);
+      if (s?.userId || s?.id || s?.personnelNumber) {
+        setUserId(s.userId || s.id || s.personnelNumber);
+      }
 
       const upcoming = getUpcomingDates(7);
       const months = monthsToQuery(upcoming);
@@ -38,7 +101,6 @@ export default function HomeScreen({ navigation }) {
         months.map((m) => getFutureReports(m.month, m.year))
       );
 
-      // Flatten + filter to only the upcoming 7 days, keep raw entries
       const upcomingApiDates = new Set(upcoming.map((d) => d.apiDate));
       const flat = results
         .flatMap((r) => (Array.isArray(r) ? r : r?.futureReports || r?.data || []))
@@ -74,7 +136,6 @@ export default function HomeScreen({ navigation }) {
     try {
       const upcoming = getUpcomingDates(7);
       const existingDates = new Set(reports.map(normalizeDate));
-
       const toCreate = upcoming.filter((d) => !existingDates.has(d.apiDate));
 
       if (toCreate.length === 0) {
@@ -117,141 +178,456 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const defaultLabel = settings?.mainCode
-    ? describeDefault(settings)
-    : 'לא הוגדר';
+  const handleSegment = async (apiDate, option) => {
+    if (option.mainCode === null) {
+      openModal(apiDate);
+      return;
+    }
+
+    setSegLoading((prev) => ({ ...prev, [apiDate]: true }));
+    try {
+      const existing = reports.find((r) => normalizeDate(r) === apiDate);
+      const existingMain = existing?.mainCode || existing?.MainCode;
+      const existingSec = existing?.secondaryCode || existing?.SecondaryCode;
+      const alreadyMatches =
+        existing && existingMain === option.mainCode && existingSec === option.secondaryCode;
+
+      if (alreadyMatches) {
+        await deleteFutureReport(apiDate);
+      } else {
+        if (existing) await deleteFutureReport(apiDate);
+        await insertFutureReport({
+          mainCode: option.mainCode,
+          secondaryCode: option.secondaryCode,
+          date: apiDate,
+        });
+      }
+      await refresh();
+    } catch (err) {
+      if (err instanceof AuthError) {
+        navigation.replace('Login');
+        return;
+      }
+      Alert.alert('שגיאה', err.message);
+    } finally {
+      setSegLoading((prev) => ({ ...prev, [apiDate]: false }));
+    }
+  };
+
+  const openModal = (apiDate) => {
+    setModalDate(apiDate);
+    setModalMain(null);
+    setModalVisible(true);
+  };
+
+  const handleModalConfirm = async (secondaryCode) => {
+    if (!modalDate || !modalMain || !secondaryCode) return;
+    setModalVisible(false);
+    setSegLoading((prev) => ({ ...prev, [modalDate]: true }));
+    try {
+      const existing = reports.find((r) => normalizeDate(r) === modalDate);
+      if (existing) await deleteFutureReport(modalDate);
+      await insertFutureReport({
+        mainCode: modalMain,
+        secondaryCode,
+        date: modalDate,
+      });
+      await refresh();
+    } catch (err) {
+      if (err instanceof AuthError) {
+        navigation.replace('Login');
+        return;
+      }
+      Alert.alert('שגיאה', err.message);
+    } finally {
+      setSegLoading((prev) => ({ ...prev, [modalDate]: false }));
+    }
+  };
+
+  const upcoming = getUpcomingDates(7);
+  const filledCount = upcoming.filter((d) =>
+    reports.some((r) => normalizeDate(r) === d.apiDate)
+  ).length;
+
+  const renderDayRow = ({ item }) => {
+    const report = reports.find((r) => normalizeDate(r) === item.apiDate);
+    const isFilled = !!report;
+    const existingMain = report?.mainCode || report?.MainCode;
+    const existingSec = report?.secondaryCode || report?.SecondaryCode;
+    const isLoading = segLoading[item.apiDate];
+    const dateObj = parseDateFromApiDate(item.apiDate);
+
+    return (
+      <View
+        style={[
+          styles.dayCard,
+          { borderColor: isFilled ? '#1f3320' : colors.border },
+        ]}
+      >
+        {/* Left: date + day name */}
+        <View style={styles.dayLeft}>
+          <Text
+            style={[
+              styles.dayDateText,
+              { color: isFilled ? colors.success : colors.text },
+            ]}
+          >
+            {formatDisplayDate(item.apiDate)}
+          </Text>
+          <Text style={styles.dayNameText}>{getDayName(dateObj)}</Text>
+        </View>
+
+        {/* Center: segmented control */}
+        <View style={styles.segmentRow}>
+          {isLoading ? (
+            <ActivityIndicator color={colors.accent} size="small" />
+          ) : (
+            SEGMENT_OPTIONS.map((opt) => {
+              const isActive =
+                isFilled &&
+                opt.mainCode !== null &&
+                existingMain === opt.mainCode &&
+                existingSec === opt.secondaryCode;
+              return (
+                <TouchableOpacity
+                  key={opt.label}
+                  style={[styles.segBtn, isActive && styles.segBtnActive]}
+                  onPress={() => handleSegment(item.apiDate, opt)}
+                >
+                  <Text style={[styles.segBtnText, isActive && styles.segBtnTextActive]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </View>
+
+        {/* Right: edit icon */}
+        <TouchableOpacity
+          style={styles.editBtn}
+          onPress={() => openModal(item.apiDate)}
+        >
+          <MaterialCommunityIcons name="pencil-outline" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>דו"ח 1</Text>
-        <View style={{ flexDirection: 'row', gap: spacing.md }}>
-          <TouchableOpacity onPress={() => navigation.navigate('TestConnection')}>
-            <Text style={styles.settingsLink}>Test</Text>
+      <StatusBar barStyle="light-content" />
+
+      {/* Top bar */}
+      <View style={styles.topBar}>
+        {userId ? (
+          <Text style={styles.userIdText}>{userId}</Text>
+        ) : (
+          <View />
+        )}
+        <View style={styles.topIcons}>
+          <TouchableOpacity style={styles.iconBtn} onPress={refresh}>
+            <MaterialCommunityIcons name="refresh" size={22} color={colors.text} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-            <Text style={styles.settingsLink}>הגדרות</Text>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => navigation.navigate('Settings')}
+          >
+            <MaterialCommunityIcons name="cog-outline" size={22} color={colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={async () => {
+              await clearCookies();
+              navigation.replace('Login');
+            }}
+          >
+            <MaterialCommunityIcons name="logout" size={22} color={colors.text} />
           </TouchableOpacity>
         </View>
       </View>
 
-      <View style={styles.defaultCard}>
-        <Text style={styles.defaultLabel}>דיווח קבוע</Text>
-        <Text style={styles.defaultValue}>{defaultLabel}</Text>
+      {/* Tabs */}
+      <View style={styles.tabRow}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'personal' && styles.tabActive]}
+          onPress={() => setActiveTab('personal')}
+        >
+          <Text
+            style={[styles.tabText, activeTab === 'personal' && styles.tabTextActive]}
+          >
+            דיווח אישי עתידי
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'team' && styles.tabActive]}
+          onPress={() => setActiveTab('team')}
+        >
+          <Text style={[styles.tabText, activeTab === 'team' && styles.tabTextActive]}>
+            החיילים שלי
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        style={[styles.fillButton, filling && styles.fillButtonDisabled]}
-        onPress={onFillWeek}
-        disabled={filling}
-      >
-        {filling ? (
-          <ActivityIndicator color={colors.accentText} />
-        ) : (
-          <Text style={styles.fillButtonText}>מילוי 7 ימים קדימה</Text>
-        )}
-      </TouchableOpacity>
-
-      <Text style={styles.sectionTitle}>דיווחים קרובים</Text>
-
-      {loading ? (
-        <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.lg }} />
+      {activeTab === 'team' ? (
+        <View style={styles.teamPlaceholder}>
+          <Text style={styles.teamPlaceholderText}>בקרוב</Text>
+        </View>
       ) : (
-        <FlatList
-          data={getUpcomingDates(7)}
-          keyExtractor={(item) => item.apiDate}
-          renderItem={({ item }) => {
-            const report = reports.find((r) => normalizeDate(r) === item.apiDate);
-            return (
-              <View style={styles.dayRow}>
-                <Text style={styles.dayDate}>{item.apiDate}</Text>
-                {report ? (
-                  <View style={styles.dayStatus}>
-                    <Text style={styles.dayStatusText}>
-                      {describeReport(report)}
-                    </Text>
-                    <TouchableOpacity onPress={() => onDelete(item.apiDate)}>
-                      <Text style={styles.deleteLink}>מחיקה</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <Text style={styles.dayEmpty}>אין דיווח</Text>
-                )}
-              </View>
-            );
-          }}
-          contentContainerStyle={{ paddingBottom: spacing.xl }}
-        />
+        <>
+          {/* Summary row */}
+          <View style={styles.summaryRow}>
+            <TouchableOpacity onPress={onFillWeek}>
+              <Text style={styles.markAllText}>סמן הכל</Text>
+            </TouchableOpacity>
+            <Text style={styles.summaryText}>
+              <Text style={styles.summaryCount}>{filledCount}</Text>
+              <Text style={styles.summaryMuted}> מוזן</Text>
+              <Text style={styles.summaryMuted}> מתוך </Text>
+              <Text style={styles.summaryCount}>7</Text>
+              <Text style={styles.summaryMuted}> ימים</Text>
+            </Text>
+          </View>
+
+          {/* Day list */}
+          {loading ? (
+            <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.lg }} />
+          ) : (
+            <FlatList
+              data={upcoming}
+              keyExtractor={(item) => item.apiDate}
+              renderItem={renderDayRow}
+              contentContainerStyle={{ paddingBottom: spacing.xl }}
+              style={{ flex: 1 }}
+            />
+          )}
+
+          {/* Bottom separator + CTA */}
+          <View style={styles.bottomSection}>
+            <View style={styles.separator} />
+            <TouchableOpacity
+              style={[styles.submitBtn, filling && styles.submitBtnDisabled]}
+              onPress={onFillWeek}
+              disabled={filling}
+            >
+              {filling ? (
+                <ActivityIndicator color={colors.accentText} />
+              ) : (
+                <Text style={styles.submitBtnText}>הגש דוח 1 — (עד שעה 11:55)</Text>
+              )}
+            </TouchableOpacity>
+            <Text style={styles.submitMeta}>ימים ריקים יוגשו עם דיווח ברירת המחדל</Text>
+          </View>
+        </>
       )}
+
+      {/* Full picker modal */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={() => setModalVisible(false)}
+        />
+        <View style={styles.modalSheet}>
+          <Text style={styles.modalTitle}>
+            {modalDate ? `בחר דיווח ל-${formatDisplayDate(modalDate)}` : 'בחר דיווח'}
+          </Text>
+
+          {modalMain === null ? (
+            // Step 1: pick main status
+            <ScrollView>
+              {STATUSES.map((s) => (
+                <TouchableOpacity
+                  key={s.statusCode}
+                  style={styles.modalOption}
+                  onPress={() => setModalMain(s.statusCode)}
+                >
+                  <Text style={styles.modalOptionText}>{s.statusDescription}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            // Step 2: pick secondary
+            <ScrollView>
+              <TouchableOpacity
+                style={styles.modalBack}
+                onPress={() => setModalMain(null)}
+              >
+                <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
+                <Text style={styles.modalBackText}>
+                  {STATUSES.find((s) => s.statusCode === modalMain)?.statusDescription}
+                </Text>
+              </TouchableOpacity>
+              {(STATUSES.find((s) => s.statusCode === modalMain)?.secondaries || []).map(
+                (sec) => (
+                  <TouchableOpacity
+                    key={sec.statusCode}
+                    style={styles.modalOption}
+                    onPress={() => handleModalConfirm(sec.statusCode)}
+                  >
+                    <Text style={styles.modalOptionText}>{sec.statusDescription}</Text>
+                  </TouchableOpacity>
+                )
+              )}
+            </ScrollView>
+          )}
+
+          <TouchableOpacity
+            style={styles.modalCancel}
+            onPress={() => setModalVisible(false)}
+          >
+            <Text style={styles.modalCancelText}>ביטול</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-// The exact shape of getFutureReport's response items is unconfirmed -
-// adjust normalizeDate/describeReport once a real response is captured.
-function normalizeDate(report) {
-  return report?.futureReportDate || report?.date || report?.FutureReportDate || '';
-}
-
-function describeReport(report) {
-  const mainCode = report?.mainCode || report?.MainCode;
-  const secCode = report?.secondaryCode || report?.SecondaryCode;
-  const sec = getSecondaryLabel(mainCode, secCode);
-  return sec ? sec.statusDescription : `${mainCode}/${secCode}`;
-}
-
-function describeDefault(settings) {
-  const main = STATUSES.find((s) => s.statusCode === settings.mainCode);
-  const sec = getSecondaryLabel(settings.mainCode, settings.secondaryCode);
-  if (!main || !sec) return 'לא הוגדר';
-  return `${main.statusDescription} - ${sec.statusDescription}`;
-}
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg, padding: spacing.md },
-  header: {
+  container: { flex: 1, backgroundColor: colors.bg },
+
+  // top bar
+  topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
   },
-  headerTitle: { color: colors.text, fontSize: 22, fontWeight: '700' },
-  settingsLink: { color: colors.accent, fontSize: 15 },
-  defaultCard: {
+  userIdText: { color: colors.textMuted, fontSize: 13 },
+  topIcons: { flexDirection: 'row', gap: spacing.sm },
+  iconBtn: { padding: spacing.xs },
+
+  // tabs
+  tabRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginHorizontal: spacing.md,
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabActive: { borderBottomColor: colors.accent },
+  tabText: { color: colors.textMuted, fontSize: 14 },
+  tabTextActive: { color: colors.accent, fontWeight: '600' },
+
+  // team placeholder
+  teamPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  teamPlaceholderText: { color: colors.textMuted, fontSize: 16 },
+
+  // summary row
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  summaryText: { fontSize: 13 },
+  summaryMuted: { color: colors.textMuted },
+  summaryCount: { color: colors.text },
+  markAllText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
+
+  // day card
+  dayCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
-  defaultLabel: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.xs },
-  defaultValue: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  fillButton: {
+  dayLeft: { width: 44, marginEnd: spacing.sm },
+  dayDateText: { fontSize: 13, fontWeight: '700' },
+  dayNameText: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+
+  // segment
+  segmentRow: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  segBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 5,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
+  },
+  segBtnActive: { backgroundColor: '#2a2616', borderColor: colors.accent },
+  segBtnText: { color: colors.textMuted, fontSize: 12 },
+  segBtnTextActive: { color: colors.accent },
+
+  // edit icon
+  editBtn: { marginStart: spacing.sm, padding: spacing.xs },
+
+  // bottom CTA
+  bottomSection: { paddingHorizontal: spacing.md, paddingBottom: spacing.lg },
+  separator: { height: 1, backgroundColor: colors.border, marginBottom: spacing.md },
+  submitBtn: {
     backgroundColor: colors.accent,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  fillButtonDisabled: { opacity: 0.6 },
-  fillButtonText: { color: colors.accentText, fontSize: 16, fontWeight: '700' },
-  sectionTitle: { color: colors.textMuted, fontSize: 14, marginBottom: spacing.sm },
-  dayRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
     marginBottom: spacing.xs,
   },
-  dayDate: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  dayStatus: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  dayStatusText: { color: colors.success, fontSize: 13 },
-  dayEmpty: { color: colors.textMuted, fontSize: 13 },
-  deleteLink: { color: colors.danger, fontSize: 13 },
+  submitBtnDisabled: { opacity: 0.6 },
+  submitBtnText: { color: colors.accentText, fontSize: 16, fontWeight: '700' },
+  submitMeta: { color: colors.textMuted, fontSize: 11, textAlign: 'center' },
+
+  // modal
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  modalSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingTop: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.xl,
+    maxHeight: '70%',
+  },
+  modalTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  modalBack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  modalBackText: { color: colors.accent, fontSize: 14 },
+  modalOption: {
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalOptionText: { color: colors.text, fontSize: 15 },
+  modalCancel: { marginTop: spacing.md, alignItems: 'center' },
+  modalCancelText: { color: colors.danger, fontSize: 15 },
 });

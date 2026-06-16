@@ -23,6 +23,7 @@ import {
   getReportedData,
   loginCommander,
   getGroups,
+  getGroupUsers,
   getCachedStatuses,
   updateAndSendPrat,
 } from '../api/doch1';
@@ -85,19 +86,18 @@ const SEGMENT_OPTIONS = [
 
 function TeamUserRow({ user, onPress }) {
   const reported = !!user.reportedMainCode;
+  const determined = !!user.isDetermined;
   const statusLabel = user.reportedSecondaryName || user.reportedMainName || 'לא מדווח';
+  const icon = determined ? 'check-circle' : reported ? 'check-circle-outline' : 'circle-outline';
+  const iconColor = determined ? colors.success : reported ? colors.accent : colors.textMuted;
   return (
     <TouchableOpacity style={teamStyles.row} onPress={onPress} activeOpacity={0.7}>
       <View style={teamStyles.rowLeft}>
-        <MaterialCommunityIcons
-          name={reported ? 'check-circle' : 'circle-outline'}
-          size={20}
-          color={reported ? colors.success : colors.textMuted}
-        />
+        <MaterialCommunityIcons name={icon} size={20} color={iconColor} />
       </View>
       <View style={teamStyles.rowCenter}>
         <Text style={teamStyles.name}>{user.firstName} {user.lastName}</Text>
-        <Text style={[teamStyles.status, reported ? teamStyles.statusReported : teamStyles.statusMissing]}>
+        <Text style={[teamStyles.status, determined ? teamStyles.statusDetermined : reported ? teamStyles.statusReported : teamStyles.statusMissing]}>
           {statusLabel}
         </Text>
       </View>
@@ -122,7 +122,8 @@ const teamStyles = StyleSheet.create({
   rowCenter: { flex: 1 },
   name: { color: colors.text, fontSize: 15, fontWeight: '600', textAlign: 'right' },
   status: { fontSize: 12, textAlign: 'right', marginTop: 2 },
-  statusReported: { color: colors.success },
+  statusDetermined: { color: colors.success },
+  statusReported: { color: colors.accent },
   statusMissing: { color: colors.textMuted },
 });
 
@@ -261,8 +262,15 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
     setTeamError(null);
     try {
       await loginCommander();
-      const data = await getGroups();
-      setTeamUsers(data?.firstGroup?.users || []);
+      const groupData = await getGroups();
+      const basicUsers = groupData?.firstGroup?.users || [];
+      const groupCode = basicUsers[0]?.groupCode || basicUsers[0]?.groupcode;
+      if (groupCode) {
+        const richData = await getGroupUsers(groupCode);
+        setTeamUsers(richData?.users || basicUsers);
+      } else {
+        setTeamUsers(basicUsers);
+      }
     } catch (err) {
       if (err instanceof AuthError) {
         navigation.replace('Login');

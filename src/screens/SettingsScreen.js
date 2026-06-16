@@ -5,7 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
+  Modal,
   I18nManager,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -15,100 +15,91 @@ import { colors, spacing, radius } from '../theme';
 
 I18nManager.forceRTL(true);
 
-const STATUS_ICONS = {
-  '01': 'shield-outline',
-  '02': 'map-marker-outline',
-  '04': 'umbrella-beach-outline',
-  '05': 'pill',
-  '13': 'airplane',
-};
+const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+
+function getDayLabel(defaults, day) {
+  const d = defaults[day];
+  if (!d) return null;
+  const main = STATUSES.find((s) => s.statusCode === d.mainCode);
+  const sec = main?.secondaries.find((s) => s.statusCode === d.secondaryCode);
+  return sec ? sec.statusDescription : null;
+}
 
 export default function SettingsScreen({ navigation }) {
-  const [selectedMain, setSelectedMain] = useState(null);
-  const [selectedSecondary, setSelectedSecondary] = useState(null);
+  const [weeklyDefaults, setWeeklyDefaults] = useState({});
+  const [modalDay, setModalDay] = useState(null);
+  const [modalMain, setModalMain] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
   useEffect(() => {
     (async () => {
       const s = await getSettings();
-      if (s?.mainCode) setSelectedMain(s.mainCode);
-      if (s?.secondaryCode) setSelectedSecondary(s.secondaryCode);
+      if (s?.weeklyDefaults) {
+        setWeeklyDefaults(s.weeklyDefaults);
+      }
     })();
   }, []);
 
-  const mainGroup = STATUSES.find((s) => s.statusCode === selectedMain);
+  const openModal = (day) => {
+    setModalDay(day);
+    setModalMain(null);
+    setModalVisible(true);
+  };
 
-  const onSelectMain = (code) => {
-    setSelectedMain(code);
-    setSelectedSecondary(null);
+  const handleSelectMain = (code) => {
+    setModalMain(code);
+  };
+
+  const handleSelectSecondary = (secondaryCode) => {
+    setWeeklyDefaults((prev) => ({
+      ...prev,
+      [modalDay]: { mainCode: modalMain, secondaryCode },
+    }));
+    setModalVisible(false);
+    setModalDay(null);
+    setModalMain(null);
+  };
+
+  const handleClear = () => {
+    setWeeklyDefaults((prev) => ({
+      ...prev,
+      [modalDay]: null,
+    }));
+    setModalVisible(false);
+    setModalDay(null);
+    setModalMain(null);
   };
 
   const onSave = async () => {
-    if (!selectedMain || !selectedSecondary) {
-      Alert.alert('יש לבחור סטטוס', 'בחר/י סטטוס ראשי ומשני לפני השמירה');
-      return;
-    }
-    await saveSettings({ mainCode: selectedMain, secondaryCode: selectedSecondary });
+    await saveSettings({ weeklyDefaults });
     navigation.goBack();
   };
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-
-        <Text style={styles.sectionLabel}>סטטוס ראשי</Text>
-        <View style={styles.grid}>
-          {STATUSES.map((s) => {
-            const isActive = selectedMain === s.statusCode;
-            return (
-              <TouchableOpacity
-                key={s.statusCode}
-                style={[styles.tile, isActive && styles.tileActive]}
-                onPress={() => onSelectMain(s.statusCode)}
-              >
-                <MaterialCommunityIcons
-                  name={STATUS_ICONS[s.statusCode] || 'circle-outline'}
-                  size={28}
-                  color={isActive ? colors.accent : colors.textMuted}
-                  style={styles.tileIcon}
-                />
-                <Text style={[styles.tileText, isActive && styles.tileTextActive]}>
-                  {s.statusDescription}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {mainGroup && (
-          <>
-            <Text style={styles.sectionLabel}>פירוט</Text>
-            <View style={styles.list}>
-              {mainGroup.secondaries.map((sec, idx) => {
-                const isActive = selectedSecondary === sec.statusCode;
-                const isLast = idx === mainGroup.secondaries.length - 1;
-                return (
-                  <TouchableOpacity
-                    key={sec.statusCode}
-                    style={[styles.row, !isLast && styles.rowBorder]}
-                    onPress={() => setSelectedSecondary(sec.statusCode)}
-                  >
-                    <Text style={[styles.rowText, isActive && styles.rowTextActive]}>
-                      {sec.statusDescription}
-                    </Text>
-                    {isActive && (
-                      <MaterialCommunityIcons
-                        name="check"
-                        size={18}
-                        color={colors.accent}
-                      />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </>
-        )}
-
+        {DAY_NAMES.map((dayName, dayIndex) => {
+          const label = getDayLabel(weeklyDefaults, dayIndex);
+          const isSet = !!label;
+          return (
+            <TouchableOpacity
+              key={dayIndex}
+              style={[styles.dayRow, isSet && styles.dayRowActive]}
+              onPress={() => openModal(dayIndex)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.dayName}>{dayName}</Text>
+              <Text style={[styles.dayLabel, isSet ? styles.dayLabelSet : styles.dayLabelUnset]}>
+                {label || 'לא מוגדר'}
+              </Text>
+              <MaterialCommunityIcons
+                name="chevron-left"
+                size={20}
+                color={isSet ? colors.accent : colors.textMuted}
+              />
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
 
       <View style={styles.footer}>
@@ -117,6 +108,74 @@ export default function SettingsScreen({ navigation }) {
           <Text style={styles.saveBtnText}>שמירה</Text>
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={() => setModalVisible(false)}
+        />
+        <View style={styles.modalSheet}>
+          <Text style={styles.modalTitle}>
+            {modalDay !== null
+              ? `ברירת מחדל — ${DAY_NAMES[modalDay]}`
+              : 'בחר סטטוס'}
+          </Text>
+
+          {modalMain === null ? (
+            // Step 1: pick main status
+            <ScrollView>
+              {STATUSES.map((s) => (
+                <TouchableOpacity
+                  key={s.statusCode}
+                  style={styles.modalOption}
+                  onPress={() => handleSelectMain(s.statusCode)}
+                >
+                  <Text style={styles.modalOptionText}>{s.statusDescription}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={styles.modalClearOption} onPress={handleClear}>
+                <MaterialCommunityIcons name="close-circle-outline" size={18} color={colors.danger} />
+                <Text style={styles.modalClearText}>לא מוגדר / נקה</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          ) : (
+            // Step 2: pick secondary
+            <ScrollView>
+              <TouchableOpacity
+                style={styles.modalBack}
+                onPress={() => setModalMain(null)}
+              >
+                <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
+                <Text style={styles.modalBackText}>
+                  {STATUSES.find((s) => s.statusCode === modalMain)?.statusDescription}
+                </Text>
+              </TouchableOpacity>
+              {(STATUSES.find((s) => s.statusCode === modalMain)?.secondaries || []).map((sec) => (
+                <TouchableOpacity
+                  key={sec.statusCode}
+                  style={styles.modalOption}
+                  onPress={() => handleSelectSecondary(sec.statusCode)}
+                >
+                  <Text style={styles.modalOptionText}>{sec.statusDescription}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+
+          <TouchableOpacity
+            style={styles.modalCancel}
+            onPress={() => setModalVisible(false)}
+          >
+            <Text style={styles.modalCancelText}>ביטול</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -125,74 +184,39 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: spacing.xl },
 
-  sectionLabel: {
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-    textAlign: 'right',
-  },
-
-  grid: {
+  dayRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  tile: {
-    width: '48%',
+    alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-    alignItems: 'center',
-  },
-  tileActive: {
-    borderColor: colors.accent,
-    backgroundColor: '#2a2616',
-  },
-  tileIcon: { marginBottom: spacing.xs },
-  tileText: {
-    color: colors.textMuted,
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  tileTextActive: {
-    color: colors.accent,
-    fontWeight: '700',
-  },
-
-  list: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
   },
-  rowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+  dayRowActive: {
+    backgroundColor: '#2a2616',
+    borderColor: colors.accent,
   },
-  rowText: {
+  dayName: {
     color: colors.text,
+    fontWeight: '700',
     fontSize: 15,
-    flex: 1,
+    minWidth: 52,
     textAlign: 'right',
   },
-  rowTextActive: {
+  dayLabel: {
+    flex: 1,
+    fontSize: 14,
+    textAlign: 'right',
+    marginHorizontal: spacing.sm,
+  },
+  dayLabelSet: {
     color: colors.accent,
-    fontWeight: '600',
+  },
+  dayLabelUnset: {
+    color: colors.textMuted,
   },
 
   footer: {
@@ -216,4 +240,48 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  modalSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingTop: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.xl,
+    maxHeight: '70%',
+  },
+  modalTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  modalBack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  modalBackText: { color: colors.accent, fontSize: 14 },
+  modalOption: {
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalOptionText: { color: colors.text, fontSize: 15, textAlign: 'right' },
+  modalClearOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    justifyContent: 'flex-end',
+  },
+  modalClearText: { color: colors.danger, fontSize: 15 },
+  modalCancel: { marginTop: spacing.md, alignItems: 'center' },
+  modalCancelText: { color: colors.danger, fontSize: 15 },
 });

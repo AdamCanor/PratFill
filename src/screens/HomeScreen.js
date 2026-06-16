@@ -124,7 +124,8 @@ export default function HomeScreen({ navigation }) {
   }, [navigation, refresh]);
 
   const onFillWeek = async () => {
-    if (!settings?.mainCode || !settings?.secondaryCode) {
+    const weeklyDefaults = settings?.weeklyDefaults;
+    if (!weeklyDefaults || Object.values(weeklyDefaults).every((v) => !v)) {
       Alert.alert('אין דיווח קבוע', 'יש להגדיר דיווח קבוע בהגדרות לפני המילוי', [
         { text: 'ביטול', style: 'cancel' },
         { text: 'להגדרות', onPress: () => navigation.navigate('Settings') },
@@ -136,20 +137,32 @@ export default function HomeScreen({ navigation }) {
     try {
       const upcoming = getUpcomingDates(7);
       const existingDates = new Set(reports.map(normalizeDate));
-      const toCreate = upcoming.filter((d) => !existingDates.has(d.apiDate));
+
+      // Only fill days that (a) have no report yet and (b) have a default set
+      const toCreate = upcoming.filter((d) => {
+        if (existingDates.has(d.apiDate)) return false;
+        const dayOfWeek = new Date(
+          parseInt(d.apiDate.split('.')[2]),
+          parseInt(d.apiDate.split('.')[1]) - 1,
+          parseInt(d.apiDate.split('.')[0])
+        ).getDay();
+        return !!weeklyDefaults[dayOfWeek];
+      });
 
       if (toCreate.length === 0) {
-        Alert.alert('הכל מוכן', '7 הימים הקרובים כבר מדווחים');
+        Alert.alert('הכל מוכן', 'כל הימים הרלוונטיים כבר מדווחים');
         setFilling(false);
         return;
       }
 
       for (const d of toCreate) {
-        await insertFutureReport({
-          mainCode: settings.mainCode,
-          secondaryCode: settings.secondaryCode,
-          date: d.apiDate,
-        });
+        const dayOfWeek = new Date(
+          parseInt(d.apiDate.split('.')[2]),
+          parseInt(d.apiDate.split('.')[1]) - 1,
+          parseInt(d.apiDate.split('.')[0])
+        ).getDay();
+        const { mainCode, secondaryCode } = weeklyDefaults[dayOfWeek];
+        await insertFutureReport({ mainCode, secondaryCode, date: d.apiDate });
       }
 
       Alert.alert('בוצע', `נוספו דיווחים ל-${toCreate.length} ימים`);

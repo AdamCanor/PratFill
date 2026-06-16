@@ -158,6 +158,14 @@ export async function getAllFilterStatuses() {
   return request('/api/Attendance/GetAllFilterStatuses');
 }
 
+export async function getAllGroupsStatistics() {
+  return request('/api/Attendance/getAllGroupsStatistics');
+}
+
+export async function getGroupUsers(groupCode) {
+  return request(`/api/attendance/GetGroupUsers?groupcode=${encodeURIComponent(groupCode)}`);
+}
+
 export async function updateAndSendPrat({ mi, mainStatusCode, secondaryStatusCode, groupCode, note = '' }) {
   return request('/api/Attendance/updateAndSendPrat', {
     method: 'POST',

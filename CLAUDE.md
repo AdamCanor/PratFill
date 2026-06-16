@@ -40,6 +40,30 @@ git commit -m "Update android/ after adding <package>"
 
 Pure JS package changes (no native code) do not require a prebuild.
 
+## API response shapes (confirmed)
+
+### `getFutureReports(month, year)`
+```json
+{
+  "days": [
+    {
+      "date": "2026-06-17T00:00:00",
+      "reportedStatusCode": "0101",
+      "reportedMainName": "נמצא/ת ביחידה",
+      "secondaryStatusReported": "נוכח/ת",
+      "icon": "img/basis.png",
+      "showStatusMsg": false
+    }
+  ],
+  "minDate": "2026-06-17T00:00:00+03:00",
+  "maxDate": "2026-07-17T00:00:00+03:00",
+  "isWeekendNachsalReportActive": true
+}
+```
+- `reportedStatusCode` is 4 chars: first 2 = mainCode, last 2 = secondaryCode (e.g. `"0101"`)
+- `date` is ISO string without timezone — treat as local date
+- `normalizeDate()` in HomeScreen converts `date` → `DD.MM.YYYY` for matching
+
 ## Patch: `@react-native-cookies/cookies`
 The library references the defunct JCenter Maven repo, which breaks Gradle.
 

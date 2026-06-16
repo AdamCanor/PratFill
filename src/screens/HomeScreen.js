@@ -46,12 +46,20 @@ function parseDateFromApiDate(apiDate) {
 // ── preserve existing logic ────────────────────────────────────────────────
 
 function normalizeDate(report) {
-  return report?.futureReportDate || report?.date || report?.FutureReportDate || '';
+  const raw = report?.date;
+  if (!raw) return '';
+  // API returns ISO string "2026-06-17T00:00:00" — convert to DD.MM.YYYY
+  const d = new Date(raw);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}.${mm}.${d.getFullYear()}`;
 }
 
 function describeReport(report) {
-  const mainCode = report?.mainCode || report?.MainCode;
-  const secCode = report?.secondaryCode || report?.SecondaryCode;
+  if (report?.secondaryStatusReported) return report.secondaryStatusReported;
+  // fallback for unexpected shapes
+  const mainCode = report?.reportedStatusCode?.slice(0, 2) || report?.mainCode || report?.MainCode;
+  const secCode = report?.reportedStatusCode?.slice(2, 4) || report?.secondaryCode || report?.SecondaryCode;
   const sec = getSecondaryLabel(mainCode, secCode);
   return sec ? sec.statusDescription : `${mainCode}/${secCode}`;
 }
@@ -103,7 +111,7 @@ export default function HomeScreen({ navigation }) {
 
       const upcomingApiDates = new Set(upcoming.map((d) => d.apiDate));
       const flat = results
-        .flatMap((r) => (Array.isArray(r) ? r : r?.futureReports || r?.data || []))
+        .flatMap((r) => (Array.isArray(r) ? r : r?.days || r?.futureReports || r?.data || []))
         .filter((r) => r && upcomingApiDates.has(normalizeDate(r)));
 
       setReports(flat);
@@ -200,8 +208,8 @@ export default function HomeScreen({ navigation }) {
     setSegLoading((prev) => ({ ...prev, [apiDate]: true }));
     try {
       const existing = reports.find((r) => normalizeDate(r) === apiDate);
-      const existingMain = existing?.mainCode || existing?.MainCode;
-      const existingSec = existing?.secondaryCode || existing?.SecondaryCode;
+      const existingMain = existing?.reportedStatusCode?.slice(0, 2) || existing?.mainCode || existing?.MainCode;
+      const existingSec = existing?.reportedStatusCode?.slice(2, 4) || existing?.secondaryCode || existing?.SecondaryCode;
       const alreadyMatches =
         existing && existingMain === option.mainCode && existingSec === option.secondaryCode;
 
@@ -265,8 +273,8 @@ export default function HomeScreen({ navigation }) {
   const renderDayRow = ({ item }) => {
     const report = reports.find((r) => normalizeDate(r) === item.apiDate);
     const isFilled = !!report;
-    const existingMain = report?.mainCode || report?.MainCode;
-    const existingSec = report?.secondaryCode || report?.SecondaryCode;
+    const existingMain = report?.reportedStatusCode?.slice(0, 2) || report?.mainCode || report?.MainCode;
+    const existingSec = report?.reportedStatusCode?.slice(2, 4) || report?.secondaryCode || report?.SecondaryCode;
     const isLoading = segLoading[item.apiDate];
     const dateObj = parseDateFromApiDate(item.apiDate);
 

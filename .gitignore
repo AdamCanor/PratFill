@@ -38,4 +38,9 @@ yarn-error.*
 
 # generated native folders
 /ios
-/android
+
+# android/ is committed so CI can skip expo prebuild
+# Re-run `npx expo prebuild -p android` locally after adding/removing native packages
+/android/build
+/android/app/build
+/android/.gradle

@@ -64,18 +64,14 @@ Pure JS package changes (no native code) do not require a prebuild.
 - `date` is ISO string without timezone — treat as local date
 - `normalizeDate()` in HomeScreen converts `date` → `DD.MM.YYYY` for matching
 
-## Patch: `@react-native-cookies/cookies`
-The library references the defunct JCenter Maven repo, which breaks Gradle.
-
-- Patch file: `patches/@react-native-cookies+cookies+6.2.1.patch`
-- Applied automatically via `postinstall: patch-package` in `package.json`
-- **`npm ci` must always run in CI** (never skip on cache hit) so the postinstall hook fires and the patch is applied. The workflow caches `~/.npm` (the npm download cache) to keep installs fast without skipping them.
+## Cookie library
+Uses `@preeternal/react-native-cookie-manager` — a drop-in replacement for the deprecated `@react-native-cookies/cookies`. Same API (`CookieManager.get(domain)`, `CookieManager.clearAll()`). No patch needed.
 
 ## CI (GitHub Actions)
 Workflow: `.github/workflows/build-apk.yml`
 - Builds a **debug APK** (`assembleDebug`) — no signing needed for sideloading.
 - Skips `expo prebuild` (android/ is committed).
-- `npm ci` only runs on `node_modules` cache miss.
+- `npm ci` always runs (caches `~/.npm` for speed).
 - Artifact: `android/app/build/outputs/apk/debug/app-debug.apk`
 
 ## Branch & PR workflow

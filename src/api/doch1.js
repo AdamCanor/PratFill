@@ -158,6 +158,14 @@ export async function getAllFilterStatuses() {
   return request('/api/Attendance/GetAllFilterStatuses');
 }
 
+export async function updateAndSendPrat({ mi, mainStatusCode, secondaryStatusCode, groupCode, note = '' }) {
+  return request('/api/Attendance/updateAndSendPrat', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json;charset=utf-8' },
+    body: JSON.stringify({ mi, mainStatusCode, secondaryStatusCode, groupCode: String(groupCode), note }),
+  });
+}
+
 const STATUSES_CACHE_KEY = 'doch1_statuses';
 
 export async function refreshStatuses() {

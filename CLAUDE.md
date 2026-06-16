@@ -40,6 +40,13 @@ git commit -m "Update android/ after adding <package>"
 
 Pure JS package changes (no native code) do not require a prebuild.
 
+## Patch: `@react-native-cookies/cookies`
+The library references the defunct JCenter Maven repo, which breaks Gradle.
+
+- Patch file: `patches/@react-native-cookies+cookies+6.2.1.patch`
+- Applied automatically via `postinstall: patch-package` in `package.json`
+- **`npm ci` must always run in CI** (never skip on cache hit) so the postinstall hook fires and the patch is applied. The workflow caches `~/.npm` (the npm download cache) to keep installs fast without skipping them.
+
 ## CI (GitHub Actions)
 Workflow: `.github/workflows/build-apk.yml`
 - Builds a **debug APK** (`assembleDebug`) — no signing needed for sideloading.

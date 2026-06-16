@@ -23,15 +23,13 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Cache node_modules
-        id: cache-node
+      - name: Cache npm
         uses: actions/cache@v4
         with:
-          path: node_modules
-          key: node-${{ hashFiles('package-lock.json') }}
+          path: ~/.npm
+          key: npm-${{ hashFiles('package-lock.json') }}
 
       - name: Install dependencies
-        if: steps.cache-node.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Cache Gradle

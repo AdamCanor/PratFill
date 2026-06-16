@@ -119,13 +119,13 @@ const teamStyles = StyleSheet.create({
 
 // ── component ─────────────────────────────────────────────────────────────
 
-export default function HomeScreen({ navigation }) {
+export default function HomeScreen({ navigation, isCommanderProp = false }) {
   const [loading, setLoading] = useState(false);
   const [filling, setFilling] = useState(false);
   const [reports, setReports] = useState([]);
   const [settings, setSettings] = useState(null);
   const [userName, setUserName] = useState(null);
-  const [isCommander, setIsCommander] = useState(false);
+  const [isCommander, setIsCommander] = useState(isCommanderProp);
 
   // new UI state
   const [activeTab, setActiveTab] = useState('personal');

@@ -142,3 +142,18 @@ export async function loginCommander() {
 export async function getGroups(groupCode = '') {
   return request(`/api/attendance/GetGroups?groupcode=${encodeURIComponent(groupCode)}`);
 }
+
+// Returns { isUserAuth, isCommanderAuth, error }
+export async function getUser() {
+  const cookieHeader = await getStoredCookieHeader();
+  if (!cookieHeader.includes('AppCookie=')) return { isUserAuth: false, isCommanderAuth: false, error: null };
+  const res = await fetch(`${BASE_URL}/api/account/getUser`, {
+    headers: { accept: 'application/json, text/plain, */*', cookie: cookieHeader },
+  });
+  if (!res.ok) return { isUserAuth: false, isCommanderAuth: false, error: null };
+  return res.json();
+}
+
+export async function getAllFilterStatuses() {
+  return request('/api/Attendance/GetAllFilterStatuses');
+}

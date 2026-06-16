@@ -24,6 +24,7 @@ import {
   loginCommander,
   getGroups,
   getCachedStatuses,
+  updateAndSendPrat,
 } from '../api/doch1';
 import { getSecondaryLabel, STATUSES as FALLBACK_STATUSES } from '../data/statuses';
 import { getUpcomingDates, monthsToQuery } from '../utils/dates';
@@ -82,11 +83,11 @@ const SEGMENT_OPTIONS = [
 
 // ── TeamUserRow ───────────────────────────────────────────────────────────
 
-function TeamUserRow({ user }) {
+function TeamUserRow({ user, onPress }) {
   const reported = !!user.reportedMainCode;
   const statusLabel = user.reportedSecondaryName || user.reportedMainName || 'לא מדווח';
   return (
-    <View style={teamStyles.row}>
+    <TouchableOpacity style={teamStyles.row} onPress={onPress} activeOpacity={0.7}>
       <View style={teamStyles.rowLeft}>
         <MaterialCommunityIcons
           name={reported ? 'check-circle' : 'circle-outline'}
@@ -100,7 +101,8 @@ function TeamUserRow({ user }) {
           {statusLabel}
         </Text>
       </View>
-    </View>
+      <MaterialCommunityIcons name="chevron-left" size={18} color={colors.textMuted} />
+    </TouchableOpacity>
   );
 }
 
@@ -146,6 +148,10 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamUsers, setTeamUsers] = useState([]);
   const [teamError, setTeamError] = useState(null);
+  const [teamModalVisible, setTeamModalVisible] = useState(false);
+  const [teamModalUser, setTeamModalUser] = useState(null);
+  const [teamModalMain, setTeamModalMain] = useState(null);
+  const [teamUpdating, setTeamUpdating] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -265,6 +271,35 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
       setTeamError(err.message);
     } finally {
       setTeamLoading(false);
+    }
+  };
+
+  const handleTeamUserPress = (user) => {
+    setTeamModalUser(user);
+    setTeamModalMain(null);
+    setTeamModalVisible(true);
+  };
+
+  const handleTeamModalConfirm = async (secondaryCode) => {
+    if (!teamModalUser || !teamModalMain || !secondaryCode) return;
+    setTeamModalVisible(false);
+    setTeamUpdating(true);
+    try {
+      await updateAndSendPrat({
+        mi: teamModalUser.mi,
+        mainStatusCode: teamModalMain,
+        secondaryStatusCode: secondaryCode,
+        groupCode: teamModalUser.groupCode || teamModalUser.groupcode || '',
+      });
+      await loadTeam();
+    } catch (err) {
+      if (err instanceof AuthError) {
+        navigation.replace('Login');
+        return;
+      }
+      Alert.alert('שגיאה', err.message);
+    } finally {
+      setTeamUpdating(false);
     }
   };
 
@@ -495,7 +530,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
             <FlatList
               data={teamUsers}
               keyExtractor={(item) => String(item.mi)}
-              renderItem={({ item }) => <TeamUserRow user={item} />}
+              renderItem={({ item }) => <TeamUserRow user={item} onPress={() => handleTeamUserPress(item)} />}
               contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}
               ListEmptyComponent={
                 <View style={styles.teamPlaceholder}>
@@ -614,6 +649,70 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           <TouchableOpacity
             style={styles.modalCancel}
             onPress={() => setModalVisible(false)}
+          >
+            <Text style={styles.modalCancelText}>ביטול</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+      {/* Team status picker modal */}
+      <Modal
+        visible={teamModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setTeamModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={() => setTeamModalVisible(false)}
+        />
+        <View style={styles.modalSheet}>
+          <Text style={styles.modalTitle}>
+            {teamModalUser
+              ? `עדכן דיווח — ${teamModalUser.firstName} ${teamModalUser.lastName}`
+              : 'עדכן דיווח'}
+          </Text>
+
+          {teamUpdating ? (
+            <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.lg }} />
+          ) : teamModalMain === null ? (
+            <ScrollView>
+              {statuses.map((s) => (
+                <TouchableOpacity
+                  key={s.statusCode}
+                  style={styles.modalOption}
+                  onPress={() => setTeamModalMain(s.statusCode)}
+                >
+                  <Text style={styles.modalOptionText}>{s.statusDescription}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <ScrollView>
+              <TouchableOpacity
+                style={styles.modalBack}
+                onPress={() => setTeamModalMain(null)}
+              >
+                <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
+                <Text style={styles.modalBackText}>
+                  {statuses.find((s) => s.statusCode === teamModalMain)?.statusDescription}
+                </Text>
+              </TouchableOpacity>
+              {(statuses.find((s) => s.statusCode === teamModalMain)?.secondaries || []).map((sec) => (
+                <TouchableOpacity
+                  key={sec.statusCode}
+                  style={styles.modalOption}
+                  onPress={() => handleTeamModalConfirm(sec.statusCode)}
+                >
+                  <Text style={styles.modalOptionText}>{sec.statusDescription}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+
+          <TouchableOpacity
+            style={styles.modalCancel}
+            onPress={() => setTeamModalVisible(false)}
           >
             <Text style={styles.modalCancelText}>ביטול</Text>
           </TouchableOpacity>

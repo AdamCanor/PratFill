@@ -9,10 +9,10 @@ React Native / Expo app (SDK 56) for IDF soldiers to submit future attendance re
 
 | Path | Purpose |
 |---|---|
-| `src/api/doch1.js` | All API calls + cookie auth. **Do not modify.** |
-| `src/data/statuses.js` | Static list of report codes. **Do not modify.** |
-| `src/utils/dates.js` | Date helpers (`getUpcomingDates`, `toApiDate`, etc.). **Do not modify.** |
-| `src/theme.js` | All colors, spacing, radius tokens. **Do not modify.** Use these — no hardcoded hex values in components. |
+| `src/api/doch1.js` | All API calls + cookie auth. |
+| `src/data/statuses.js` | Static list of report codes. |
+| `src/utils/dates.js` | Date helpers (`getUpcomingDates`, `toApiDate`, etc.). |
+| `src/theme.js` | All colors, spacing, radius tokens. Use these — no hardcoded hex values in components. |
 | `src/screens/HomeScreen.js` | Main screen. |
 | `src/screens/LoginScreen.js` | WebView login flow — sets AppCookie. |
 | `src/screens/SettingsScreen.js` | User preferences (default report codes). |

@@ -7,7 +7,7 @@ import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import TestConnectionScreen from '../screens/TestConnectionScreen';
-import { hasAppCookie } from '../api/doch1';
+import { getUser, refreshStatuses } from '../api/doch1';
 import { colors } from '../theme';
 
 const Stack = createNativeStackNavigator();
@@ -26,11 +26,14 @@ const navTheme = {
 
 export default function RootNavigator() {
   const [initialRoute, setInitialRoute] = useState(null);
+  const [isCommander, setIsCommander] = useState(false);
 
   useEffect(() => {
     (async () => {
-      const ok = await hasAppCookie();
-      setInitialRoute(ok ? 'Home' : 'Login');
+      const user = await getUser();
+      setIsCommander(!!user?.isCommanderAuth);
+      setInitialRoute(user?.isUserAuth ? 'Home' : 'Login');
+      if (user?.isUserAuth) refreshStatuses().catch(() => {});
     })();
   }, []);
 
@@ -59,9 +62,10 @@ export default function RootNavigator() {
         />
         <Stack.Screen
           name="Home"
-          component={HomeScreen}
-          options={{ title: 'דו"ח 1', headerShown: false }}
-        />
+          options={{ title: 'דוח 67', headerShown: false }}
+        >
+          {(props) => <HomeScreen {...props} isCommanderProp={isCommander} />}
+        </Stack.Screen>
         <Stack.Screen
           name="Settings"
           component={SettingsScreen}

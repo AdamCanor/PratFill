@@ -20,9 +20,14 @@ import {
   getSettings,
   clearCookies,
   AuthError,
+  getReportedData,
+  loginCommander,
+  getGroups,
+  getCachedStatuses,
+  updateAndSendPrat,
 } from '../api/doch1';
-import { getSecondaryLabel, STATUSES } from '../data/statuses';
-import { getUpcomingDates, monthsToQuery, toApiDate } from '../utils/dates';
+import { getSecondaryLabel, STATUSES as FALLBACK_STATUSES } from '../data/statuses';
+import { getUpcomingDates, monthsToQuery } from '../utils/dates';
 import { colors, spacing, radius } from '../theme';
 
 I18nManager.forceRTL(true);
@@ -46,21 +51,28 @@ function parseDateFromApiDate(apiDate) {
 // ── preserve existing logic ────────────────────────────────────────────────
 
 function normalizeDate(report) {
-  return report?.futureReportDate || report?.date || report?.FutureReportDate || '';
+  const raw = report?.date;
+  if (!raw) return '';
+  // API returns ISO string "2026-06-17T00:00:00" — convert to DD.MM.YYYY
+  const d = new Date(raw);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}.${mm}.${d.getFullYear()}`;
+}
+
+function getSecondaryLabelFromList(statuses, mainCode, secondaryCode) {
+  const main = statuses.find((s) => s.statusCode === mainCode);
+  if (!main) return null;
+  return main.secondaries.find((s) => s.statusCode === secondaryCode) || null;
 }
 
 function describeReport(report) {
-  const mainCode = report?.mainCode || report?.MainCode;
-  const secCode = report?.secondaryCode || report?.SecondaryCode;
-  const sec = getSecondaryLabel(mainCode, secCode);
+  if (report?.secondaryStatusReported) return report.secondaryStatusReported;
+  // fallback for unexpected shapes
+  const mainCode = report?.reportedStatusCode?.slice(0, 2) || report?.mainCode || report?.MainCode;
+  const secCode = report?.reportedStatusCode?.slice(2, 4) || report?.secondaryCode || report?.SecondaryCode;
+  const sec = getSecondaryLabelFromList(FALLBACK_STATUSES, mainCode, secCode);
   return sec ? sec.statusDescription : `${mainCode}/${secCode}`;
-}
-
-function describeDefault(settings) {
-  const main = STATUSES.find((s) => s.statusCode === settings.mainCode);
-  const sec = getSecondaryLabel(settings.mainCode, settings.secondaryCode);
-  if (!main || !sec) return 'לא הוגדר';
-  return `${main.statusDescription} - ${sec.statusDescription}`;
 }
 
 const SEGMENT_OPTIONS = [
@@ -69,14 +81,61 @@ const SEGMENT_OPTIONS = [
   { label: 'אחר', mainCode: null, secondaryCode: null },
 ];
 
+// ── TeamUserRow ───────────────────────────────────────────────────────────
+
+function TeamUserRow({ user, onPress }) {
+  const reported = !!user.reportedMainCode;
+  const statusLabel = user.reportedSecondaryName || user.reportedMainName || 'לא מדווח';
+  return (
+    <TouchableOpacity style={teamStyles.row} onPress={onPress} activeOpacity={0.7}>
+      <View style={teamStyles.rowLeft}>
+        <MaterialCommunityIcons
+          name={reported ? 'check-circle' : 'circle-outline'}
+          size={20}
+          color={reported ? colors.success : colors.textMuted}
+        />
+      </View>
+      <View style={teamStyles.rowCenter}>
+        <Text style={teamStyles.name}>{user.firstName} {user.lastName}</Text>
+        <Text style={[teamStyles.status, reported ? teamStyles.statusReported : teamStyles.statusMissing]}>
+          {statusLabel}
+        </Text>
+      </View>
+      <MaterialCommunityIcons name="chevron-left" size={18} color={colors.textMuted} />
+    </TouchableOpacity>
+  );
+}
+
+const teamStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  rowLeft: { marginEnd: spacing.sm },
+  rowCenter: { flex: 1 },
+  name: { color: colors.text, fontSize: 15, fontWeight: '600', textAlign: 'right' },
+  status: { fontSize: 12, textAlign: 'right', marginTop: 2 },
+  statusReported: { color: colors.success },
+  statusMissing: { color: colors.textMuted },
+});
+
 // ── component ─────────────────────────────────────────────────────────────
 
-export default function HomeScreen({ navigation }) {
+export default function HomeScreen({ navigation, isCommanderProp = false }) {
   const [loading, setLoading] = useState(false);
   const [filling, setFilling] = useState(false);
   const [reports, setReports] = useState([]);
   const [settings, setSettings] = useState(null);
-  const [userId, setUserId] = useState(null);
+  const [statuses, setStatuses] = useState(FALLBACK_STATUSES);
+  const [userName, setUserName] = useState(null);
+  const [isCommander, setIsCommander] = useState(isCommanderProp);
 
   // new UI state
   const [activeTab, setActiveTab] = useState('personal');
@@ -85,13 +144,32 @@ export default function HomeScreen({ navigation }) {
   const [modalMain, setModalMain] = useState(null);
   const [segLoading, setSegLoading] = useState({});
 
+  // team tab state
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [teamUsers, setTeamUsers] = useState([]);
+  const [teamError, setTeamError] = useState(null);
+  const [teamModalVisible, setTeamModalVisible] = useState(false);
+  const [teamModalUser, setTeamModalUser] = useState(null);
+  const [teamModalMain, setTeamModalMain] = useState(null);
+  const [teamUpdating, setTeamUpdating] = useState(false);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const s = await getSettings();
       setSettings(s);
-      if (s?.userId || s?.id || s?.personnelNumber) {
-        setUserId(s.userId || s.id || s.personnelNumber);
+
+      const cached = await getCachedStatuses();
+      if (cached && cached.length > 0) setStatuses(cached);
+
+      try {
+        const userData = await getReportedData();
+        if (userData?.firstName) {
+          setUserName(`${userData.firstName} ${userData.lastName}`.trim());
+        }
+        setIsCommander(!!userData?.commander);
+      } catch (_) {
+        // non-fatal — top bar name is optional
       }
 
       const upcoming = getUpcomingDates(7);
@@ -103,7 +181,7 @@ export default function HomeScreen({ navigation }) {
 
       const upcomingApiDates = new Set(upcoming.map((d) => d.apiDate));
       const flat = results
-        .flatMap((r) => (Array.isArray(r) ? r : r?.futureReports || r?.data || []))
+        .flatMap((r) => (Array.isArray(r) ? r : r?.days || r?.futureReports || r?.data || []))
         .filter((r) => r && upcomingApiDates.has(normalizeDate(r)));
 
       setReports(flat);
@@ -124,7 +202,8 @@ export default function HomeScreen({ navigation }) {
   }, [navigation, refresh]);
 
   const onFillWeek = async () => {
-    if (!settings?.mainCode || !settings?.secondaryCode) {
+    const weeklyDefaults = settings?.weeklyDefaults;
+    if (!weeklyDefaults || Object.values(weeklyDefaults).every((v) => !v)) {
       Alert.alert('אין דיווח קבוע', 'יש להגדיר דיווח קבוע בהגדרות לפני המילוי', [
         { text: 'ביטול', style: 'cancel' },
         { text: 'להגדרות', onPress: () => navigation.navigate('Settings') },
@@ -136,20 +215,32 @@ export default function HomeScreen({ navigation }) {
     try {
       const upcoming = getUpcomingDates(7);
       const existingDates = new Set(reports.map(normalizeDate));
-      const toCreate = upcoming.filter((d) => !existingDates.has(d.apiDate));
+
+      // Only fill days that (a) have no report yet and (b) have a default set
+      const toCreate = upcoming.filter((d) => {
+        if (existingDates.has(d.apiDate)) return false;
+        const dayOfWeek = new Date(
+          parseInt(d.apiDate.split('.')[2]),
+          parseInt(d.apiDate.split('.')[1]) - 1,
+          parseInt(d.apiDate.split('.')[0])
+        ).getDay();
+        return !!weeklyDefaults[dayOfWeek];
+      });
 
       if (toCreate.length === 0) {
-        Alert.alert('הכל מוכן', '7 הימים הקרובים כבר מדווחים');
+        Alert.alert('הכל מוכן', 'כל הימים הרלוונטיים כבר מדווחים');
         setFilling(false);
         return;
       }
 
       for (const d of toCreate) {
-        await insertFutureReport({
-          mainCode: settings.mainCode,
-          secondaryCode: settings.secondaryCode,
-          date: d.apiDate,
-        });
+        const dayOfWeek = new Date(
+          parseInt(d.apiDate.split('.')[2]),
+          parseInt(d.apiDate.split('.')[1]) - 1,
+          parseInt(d.apiDate.split('.')[0])
+        ).getDay();
+        const { mainCode, secondaryCode } = weeklyDefaults[dayOfWeek];
+        await insertFutureReport({ mainCode, secondaryCode, date: d.apiDate });
       }
 
       Alert.alert('בוצע', `נוספו דיווחים ל-${toCreate.length} ימים`);
@@ -162,6 +253,53 @@ export default function HomeScreen({ navigation }) {
       Alert.alert('שגיאה בשליחה', err.message);
     } finally {
       setFilling(false);
+    }
+  };
+
+  const loadTeam = async () => {
+    setTeamLoading(true);
+    setTeamError(null);
+    try {
+      await loginCommander();
+      const data = await getGroups();
+      setTeamUsers(data?.firstGroup?.users || []);
+    } catch (err) {
+      if (err instanceof AuthError) {
+        navigation.replace('Login');
+        return;
+      }
+      setTeamError(err.message);
+    } finally {
+      setTeamLoading(false);
+    }
+  };
+
+  const handleTeamUserPress = (user) => {
+    setTeamModalUser(user);
+    setTeamModalMain(null);
+    setTeamModalVisible(true);
+  };
+
+  const handleTeamModalConfirm = async (secondaryCode) => {
+    if (!teamModalUser || !teamModalMain || !secondaryCode) return;
+    setTeamModalVisible(false);
+    setTeamUpdating(true);
+    try {
+      await updateAndSendPrat({
+        mi: teamModalUser.mi,
+        mainStatusCode: teamModalMain,
+        secondaryStatusCode: secondaryCode,
+        groupCode: teamModalUser.groupCode || teamModalUser.groupcode || '',
+      });
+      await loadTeam();
+    } catch (err) {
+      if (err instanceof AuthError) {
+        navigation.replace('Login');
+        return;
+      }
+      Alert.alert('שגיאה', err.message);
+    } finally {
+      setTeamUpdating(false);
     }
   };
 
@@ -187,8 +325,8 @@ export default function HomeScreen({ navigation }) {
     setSegLoading((prev) => ({ ...prev, [apiDate]: true }));
     try {
       const existing = reports.find((r) => normalizeDate(r) === apiDate);
-      const existingMain = existing?.mainCode || existing?.MainCode;
-      const existingSec = existing?.secondaryCode || existing?.SecondaryCode;
+      const existingMain = existing?.reportedStatusCode?.slice(0, 2) || existing?.mainCode || existing?.MainCode;
+      const existingSec = existing?.reportedStatusCode?.slice(2, 4) || existing?.secondaryCode || existing?.SecondaryCode;
       const alreadyMatches =
         existing && existingMain === option.mainCode && existingSec === option.secondaryCode;
 
@@ -249,19 +387,27 @@ export default function HomeScreen({ navigation }) {
     reports.some((r) => normalizeDate(r) === d.apiDate)
   ).length;
 
+  const todayApiDate = (() => {
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    return `${dd}.${mm}.${now.getFullYear()}`;
+  })();
+
   const renderDayRow = ({ item }) => {
     const report = reports.find((r) => normalizeDate(r) === item.apiDate);
     const isFilled = !!report;
-    const existingMain = report?.mainCode || report?.MainCode;
-    const existingSec = report?.secondaryCode || report?.SecondaryCode;
+    const existingMain = report?.reportedStatusCode?.slice(0, 2) || report?.mainCode || report?.MainCode;
+    const existingSec = report?.reportedStatusCode?.slice(2, 4) || report?.secondaryCode || report?.SecondaryCode;
     const isLoading = segLoading[item.apiDate];
     const dateObj = parseDateFromApiDate(item.apiDate);
+    const isToday = item.apiDate === todayApiDate;
 
     return (
       <View
         style={[
           styles.dayCard,
-          { borderColor: isFilled ? '#1f3320' : colors.border },
+          { borderColor: isFilled ? '#1f3320' : isToday ? colors.accent : colors.border },
         ]}
       >
         {/* Left: date + day name */}
@@ -269,12 +415,12 @@ export default function HomeScreen({ navigation }) {
           <Text
             style={[
               styles.dayDateText,
-              { color: isFilled ? colors.success : colors.text },
+              { color: isFilled ? colors.success : isToday ? colors.accent : colors.text },
             ]}
           >
             {formatDisplayDate(item.apiDate)}
           </Text>
-          <Text style={styles.dayNameText}>{getDayName(dateObj)}</Text>
+          <Text style={[styles.dayNameText, isToday && { color: colors.accent }]}>{getDayName(dateObj)}</Text>
         </View>
 
         {/* Center: segmented control */}
@@ -320,8 +466,8 @@ export default function HomeScreen({ navigation }) {
 
       {/* Top bar */}
       <View style={styles.topBar}>
-        {userId ? (
-          <Text style={styles.userIdText}>{userId}</Text>
+        {userName ? (
+          <Text style={styles.userIdText}>{userName}</Text>
         ) : (
           <View />
         )}
@@ -361,7 +507,10 @@ export default function HomeScreen({ navigation }) {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'team' && styles.tabActive]}
-          onPress={() => setActiveTab('team')}
+          onPress={() => {
+            setActiveTab('team');
+            if (teamUsers.length === 0 && !teamLoading) loadTeam();
+          }}
         >
           <Text style={[styles.tabText, activeTab === 'team' && styles.tabTextActive]}>
             החיילים שלי
@@ -370,8 +519,36 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       {activeTab === 'team' ? (
-        <View style={styles.teamPlaceholder}>
-          <Text style={styles.teamPlaceholderText}>בקרוב</Text>
+        <View style={{ flex: 1 }}>
+          {teamLoading ? (
+            <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.lg }} />
+          ) : teamError ? (
+            <View style={styles.teamPlaceholder}>
+              <Text style={styles.teamErrorText}>{teamError}</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={loadTeam}>
+                <Text style={styles.retryBtnText}>נסה שוב</Text>
+              </TouchableOpacity>
+            </View>
+          ) : !isCommander && teamUsers.length === 0 ? (
+            <View style={styles.teamPlaceholder}>
+              <MaterialCommunityIcons name="shield-off-outline" size={40} color={colors.textMuted} />
+              <Text style={styles.teamPlaceholderText}>אין הרשאת מפקד</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={teamUsers}
+              keyExtractor={(item) => String(item.mi)}
+              renderItem={({ item }) => <TeamUserRow user={item} onPress={() => handleTeamUserPress(item)} />}
+              contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}
+              ListEmptyComponent={
+                <View style={styles.teamPlaceholder}>
+                  <Text style={styles.teamPlaceholderText}>אין חיילים בקבוצה</Text>
+                </View>
+              }
+              onRefresh={loadTeam}
+              refreshing={teamLoading}
+            />
+          )}
         </View>
       ) : (
         <>
@@ -441,7 +618,7 @@ export default function HomeScreen({ navigation }) {
           {modalMain === null ? (
             // Step 1: pick main status
             <ScrollView>
-              {STATUSES.map((s) => (
+              {statuses.map((s) => (
                 <TouchableOpacity
                   key={s.statusCode}
                   style={styles.modalOption}
@@ -460,10 +637,10 @@ export default function HomeScreen({ navigation }) {
               >
                 <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
                 <Text style={styles.modalBackText}>
-                  {STATUSES.find((s) => s.statusCode === modalMain)?.statusDescription}
+                  {statuses.find((s) => s.statusCode === modalMain)?.statusDescription}
                 </Text>
               </TouchableOpacity>
-              {(STATUSES.find((s) => s.statusCode === modalMain)?.secondaries || []).map(
+              {(statuses.find((s) => s.statusCode === modalMain)?.secondaries || []).map(
                 (sec) => (
                   <TouchableOpacity
                     key={sec.statusCode}
@@ -480,6 +657,70 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity
             style={styles.modalCancel}
             onPress={() => setModalVisible(false)}
+          >
+            <Text style={styles.modalCancelText}>ביטול</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+      {/* Team status picker modal */}
+      <Modal
+        visible={teamModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setTeamModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={() => setTeamModalVisible(false)}
+        />
+        <View style={styles.modalSheet}>
+          <Text style={styles.modalTitle}>
+            {teamModalUser
+              ? `עדכן דיווח — ${teamModalUser.firstName} ${teamModalUser.lastName}`
+              : 'עדכן דיווח'}
+          </Text>
+
+          {teamUpdating ? (
+            <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.lg }} />
+          ) : teamModalMain === null ? (
+            <ScrollView>
+              {statuses.map((s) => (
+                <TouchableOpacity
+                  key={s.statusCode}
+                  style={styles.modalOption}
+                  onPress={() => setTeamModalMain(s.statusCode)}
+                >
+                  <Text style={styles.modalOptionText}>{s.statusDescription}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <ScrollView>
+              <TouchableOpacity
+                style={styles.modalBack}
+                onPress={() => setTeamModalMain(null)}
+              >
+                <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
+                <Text style={styles.modalBackText}>
+                  {statuses.find((s) => s.statusCode === teamModalMain)?.statusDescription}
+                </Text>
+              </TouchableOpacity>
+              {(statuses.find((s) => s.statusCode === teamModalMain)?.secondaries || []).map((sec) => (
+                <TouchableOpacity
+                  key={sec.statusCode}
+                  style={styles.modalOption}
+                  onPress={() => handleTeamModalConfirm(sec.statusCode)}
+                >
+                  <Text style={styles.modalOptionText}>{sec.statusDescription}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+
+          <TouchableOpacity
+            style={styles.modalCancel}
+            onPress={() => setTeamModalVisible(false)}
           >
             <Text style={styles.modalCancelText}>ביטול</Text>
           </TouchableOpacity>
@@ -524,8 +765,11 @@ const styles = StyleSheet.create({
   tabTextActive: { color: colors.accent, fontWeight: '600' },
 
   // team placeholder
-  teamPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  teamPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   teamPlaceholderText: { color: colors.textMuted, fontSize: 16 },
+  teamErrorText: { color: colors.danger, fontSize: 14, textAlign: 'center', paddingHorizontal: spacing.md },
+  retryBtn: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
+  retryBtnText: { color: colors.accent, fontSize: 14 },
 
   // summary row
   summaryRow: {

@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import CookieManager from '@react-native-cookies/cookies';
+import CookieManager from '@preeternal/react-native-cookie-manager';
 
 const BASE_URL = 'https://one.prat.idf.il';
 const COOKIE_DOMAIN = 'https://one.prat.idf.il';
@@ -129,4 +129,75 @@ export async function getSettings() {
 
 export async function saveSettings(settings) {
   await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+export async function getReportedData() {
+  return request('/api/Attendance/GetReportedData');
+}
+
+export async function loginCommander() {
+  return request('/api/account/loginCommander', { method: 'POST' });
+}
+
+export async function getGroups(groupCode = '') {
+  return request(`/api/attendance/GetGroups?groupcode=${encodeURIComponent(groupCode)}`);
+}
+
+// Returns { isUserAuth, isCommanderAuth, error }
+export async function getUser() {
+  const cookieHeader = await getStoredCookieHeader();
+  if (!cookieHeader.includes('AppCookie=')) return { isUserAuth: false, isCommanderAuth: false, error: null };
+  const res = await fetch(`${BASE_URL}/api/account/getUser`, {
+    headers: { accept: 'application/json, text/plain, */*', cookie: cookieHeader },
+  });
+  if (!res.ok) return { isUserAuth: false, isCommanderAuth: false, error: null };
+  return res.json();
+}
+
+export async function getAllFilterStatuses() {
+  return request('/api/Attendance/GetAllFilterStatuses');
+}
+
+export async function updateAndSendPrat({ mi, mainStatusCode, secondaryStatusCode, groupCode, note = '' }) {
+  return request('/api/Attendance/updateAndSendPrat', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json;charset=utf-8' },
+    body: JSON.stringify({ mi, mainStatusCode, secondaryStatusCode, groupCode: String(groupCode), note }),
+  });
+}
+
+const STATUSES_CACHE_KEY = 'doch1_statuses';
+
+export async function refreshStatuses() {
+  try {
+    const data = await getAllFilterStatuses();
+    const statuses = (data?.primaries || [])
+      .filter((p) => !p.isEmergency)
+      .map((p) => ({
+        statusCode: p.statusCode,
+        statusDescription: p.statusDescription.trim(),
+        icon: (p.icon || '').replace('img/', '').replace('.png', ''),
+        secondaries: (p.secondaries || [])
+          .filter((s) => s.futureReportDays > 0)
+          .map((s) => ({
+            statusCode: s.statusCode,
+            statusDescription: s.statusDescription.trim(),
+          })),
+      }));
+    if (statuses.length > 0) {
+      await AsyncStorage.setItem(STATUSES_CACHE_KEY, JSON.stringify(statuses));
+    }
+    return statuses;
+  } catch (_) {
+    return null;
+  }
+}
+
+export async function getCachedStatuses() {
+  try {
+    const raw = await AsyncStorage.getItem(STATUSES_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
 }

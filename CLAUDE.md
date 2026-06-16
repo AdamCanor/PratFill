@@ -40,11 +40,47 @@ git commit -m "Update android/ after adding <package>"
 
 Pure JS package changes (no native code) do not require a prebuild.
 
+## API response shapes (confirmed)
+
+### `getFutureReports(month, year)`
+```json
+{
+  "days": [
+    {
+      "date": "2026-06-17T00:00:00",
+      "reportedStatusCode": "0101",
+      "reportedMainName": "נמצא/ת ביחידה",
+      "secondaryStatusReported": "נוכח/ת",
+      "icon": "img/basis.png",
+      "showStatusMsg": false
+    }
+  ],
+  "minDate": "2026-06-17T00:00:00+03:00",
+  "maxDate": "2026-07-17T00:00:00+03:00",
+  "isWeekendNachsalReportActive": true
+}
+```
+- `reportedStatusCode` is 4 chars: first 2 = mainCode, last 2 = secondaryCode (e.g. `"0101"`)
+- `date` is ISO string without timezone — treat as local date
+- `normalizeDate()` in HomeScreen converts `date` → `DD.MM.YYYY` for matching
+
+### `getReportedData()` — GET /api/Attendance/GetReportedData
+Returns current user info: `{ firstName, lastName, commander: bool, reported: bool, mainStatusReported, secondaryStatusReported, ... }`
+
+### `loginCommander()` — POST /api/account/loginCommander
+Must be called before GetGroups. Returns `{ isUserAuth, isCommanderAuth, error }`.
+
+### `getGroups(groupCode)` — GET /api/attendance/GetGroups?groupcode=
+Returns `{ firstGroup: { users: [...] }, ... }`. Each user: `{ mi, firstName, lastName, reportedMainCode, reportedMainName, reportedSecondaryCode, reportedSecondaryName, createdToday, isFutureReport, groupCode }`.
+
+## Cookie library
+Uses `@preeternal/react-native-cookie-manager` — a drop-in replacement for the deprecated `@react-native-cookies/cookies`. Same API (`CookieManager.get(domain)`, `CookieManager.clearAll()`). No patch needed.
+
 ## CI (GitHub Actions)
 Workflow: `.github/workflows/build-apk.yml`
 - Builds a **debug APK** (`assembleDebug`) — no signing needed for sideloading.
 - Skips `expo prebuild` (android/ is committed).
-- `npm ci` only runs on `node_modules` cache miss.
+- `npm ci` always runs (caches `~/.npm` for speed).
 - Artifact: `android/app/build/outputs/apk/debug/app-debug.apk`
 
 ## Branch & PR workflow

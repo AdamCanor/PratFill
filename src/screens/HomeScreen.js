@@ -23,8 +23,9 @@ import {
   getReportedData,
   loginCommander,
   getGroups,
+  getCachedStatuses,
 } from '../api/doch1';
-import { getSecondaryLabel, STATUSES } from '../data/statuses';
+import { getSecondaryLabel, STATUSES as FALLBACK_STATUSES } from '../data/statuses';
 import { getUpcomingDates, monthsToQuery } from '../utils/dates';
 import { colors, spacing, radius } from '../theme';
 
@@ -58,12 +59,18 @@ function normalizeDate(report) {
   return `${dd}.${mm}.${d.getFullYear()}`;
 }
 
+function getSecondaryLabelFromList(statuses, mainCode, secondaryCode) {
+  const main = statuses.find((s) => s.statusCode === mainCode);
+  if (!main) return null;
+  return main.secondaries.find((s) => s.statusCode === secondaryCode) || null;
+}
+
 function describeReport(report) {
   if (report?.secondaryStatusReported) return report.secondaryStatusReported;
   // fallback for unexpected shapes
   const mainCode = report?.reportedStatusCode?.slice(0, 2) || report?.mainCode || report?.MainCode;
   const secCode = report?.reportedStatusCode?.slice(2, 4) || report?.secondaryCode || report?.SecondaryCode;
-  const sec = getSecondaryLabel(mainCode, secCode);
+  const sec = getSecondaryLabelFromList(FALLBACK_STATUSES, mainCode, secCode);
   return sec ? sec.statusDescription : `${mainCode}/${secCode}`;
 }
 
@@ -124,6 +131,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
   const [filling, setFilling] = useState(false);
   const [reports, setReports] = useState([]);
   const [settings, setSettings] = useState(null);
+  const [statuses, setStatuses] = useState(FALLBACK_STATUSES);
   const [userName, setUserName] = useState(null);
   const [isCommander, setIsCommander] = useState(isCommanderProp);
 
@@ -144,6 +152,9 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
     try {
       const s = await getSettings();
       setSettings(s);
+
+      const cached = await getCachedStatuses();
+      if (cached && cached.length > 0) setStatuses(cached);
 
       try {
         const userData = await getReportedData();
@@ -564,7 +575,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           {modalMain === null ? (
             // Step 1: pick main status
             <ScrollView>
-              {STATUSES.map((s) => (
+              {statuses.map((s) => (
                 <TouchableOpacity
                   key={s.statusCode}
                   style={styles.modalOption}
@@ -583,10 +594,10 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
               >
                 <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
                 <Text style={styles.modalBackText}>
-                  {STATUSES.find((s) => s.statusCode === modalMain)?.statusDescription}
+                  {statuses.find((s) => s.statusCode === modalMain)?.statusDescription}
                 </Text>
               </TouchableOpacity>
-              {(STATUSES.find((s) => s.statusCode === modalMain)?.secondaries || []).map(
+              {(statuses.find((s) => s.statusCode === modalMain)?.secondaries || []).map(
                 (sec) => (
                   <TouchableOpacity
                     key={sec.statusCode}

@@ -10,18 +10,18 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { STATUSES } from '../data/statuses';
-import { getSettings, saveSettings } from '../api/doch1';
+import { STATUSES as FALLBACK_STATUSES } from '../data/statuses';
+import { getSettings, saveSettings, getCachedStatuses } from '../api/doch1';
 import { colors, spacing, radius } from '../theme';
 
 I18nManager.forceRTL(true);
 
 const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
-function getDayLabel(defaults, day) {
+function getDayLabel(statuses, defaults, day) {
   const d = defaults[day];
   if (!d) return null;
-  const main = STATUSES.find((s) => s.statusCode === d.mainCode);
+  const main = statuses.find((s) => s.statusCode === d.mainCode);
   const sec = main?.secondaries.find((s) => s.statusCode === d.secondaryCode);
   return sec ? sec.statusDescription : null;
 }
@@ -32,6 +32,7 @@ export default function SettingsScreen({ navigation }) {
   const [modalMain, setModalMain] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [statuses, setStatuses] = useState(FALLBACK_STATUSES);
 
   useEffect(() => {
     (async () => {
@@ -39,6 +40,8 @@ export default function SettingsScreen({ navigation }) {
       if (s?.weeklyDefaults) {
         setWeeklyDefaults(s.weeklyDefaults);
       }
+      const cached = await getCachedStatuses();
+      if (cached && cached.length > 0) setStatuses(cached);
     })();
   }, []);
 
@@ -83,7 +86,7 @@ export default function SettingsScreen({ navigation }) {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         {DAY_NAMES.map((dayName, dayIndex) => {
-          const label = getDayLabel(weeklyDefaults, dayIndex);
+          const label = getDayLabel(statuses, weeklyDefaults, dayIndex);
           const isSet = !!label;
           return (
             <TouchableOpacity
@@ -142,7 +145,7 @@ export default function SettingsScreen({ navigation }) {
           {modalMain === null ? (
             // Step 1: pick main status
             <ScrollView>
-              {STATUSES.map((s) => (
+              {statuses.map((s) => (
                 <TouchableOpacity
                   key={s.statusCode}
                   style={styles.modalOption}
@@ -165,10 +168,10 @@ export default function SettingsScreen({ navigation }) {
               >
                 <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
                 <Text style={styles.modalBackText}>
-                  {STATUSES.find((s) => s.statusCode === modalMain)?.statusDescription}
+                  {statuses.find((s) => s.statusCode === modalMain)?.statusDescription}
                 </Text>
               </TouchableOpacity>
-              {(STATUSES.find((s) => s.statusCode === modalMain)?.secondaries || []).map((sec) => (
+              {(statuses.find((s) => s.statusCode === modalMain)?.secondaries || []).map((sec) => (
                 <TouchableOpacity
                   key={sec.statusCode}
                   style={styles.modalOption}

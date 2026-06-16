@@ -157,3 +157,39 @@ export async function getUser() {
 export async function getAllFilterStatuses() {
   return request('/api/Attendance/GetAllFilterStatuses');
 }
+
+const STATUSES_CACHE_KEY = 'doch1_statuses';
+
+export async function refreshStatuses() {
+  try {
+    const data = await getAllFilterStatuses();
+    const statuses = (data?.primaries || [])
+      .filter((p) => !p.isEmergency)
+      .map((p) => ({
+        statusCode: p.statusCode,
+        statusDescription: p.statusDescription.trim(),
+        icon: (p.icon || '').replace('img/', '').replace('.png', ''),
+        secondaries: (p.secondaries || [])
+          .filter((s) => s.futureReportDays > 0)
+          .map((s) => ({
+            statusCode: s.statusCode,
+            statusDescription: s.statusDescription.trim(),
+          })),
+      }));
+    if (statuses.length > 0) {
+      await AsyncStorage.setItem(STATUSES_CACHE_KEY, JSON.stringify(statuses));
+    }
+    return statuses;
+  } catch (_) {
+    return null;
+  }
+}
+
+export async function getCachedStatuses() {
+  try {
+    const raw = await AsyncStorage.getItem(STATUSES_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
+}

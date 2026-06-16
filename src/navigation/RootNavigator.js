@@ -7,7 +7,7 @@ import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import TestConnectionScreen from '../screens/TestConnectionScreen';
-import { getUser } from '../api/doch1';
+import { getUser, refreshStatuses } from '../api/doch1';
 import { colors } from '../theme';
 
 const Stack = createNativeStackNavigator();
@@ -33,6 +33,7 @@ export default function RootNavigator() {
       const user = await getUser();
       setIsCommander(!!user?.isCommanderAuth);
       setInitialRoute(user?.isUserAuth ? 'Home' : 'Login');
+      if (user?.isUserAuth) refreshStatuses().catch(() => {});
     })();
   }, []);
 

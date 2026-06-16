@@ -387,6 +387,13 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
     reports.some((r) => normalizeDate(r) === d.apiDate)
   ).length;
 
+  const todayApiDate = (() => {
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    return `${dd}.${mm}.${now.getFullYear()}`;
+  })();
+
   const renderDayRow = ({ item }) => {
     const report = reports.find((r) => normalizeDate(r) === item.apiDate);
     const isFilled = !!report;
@@ -394,12 +401,13 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
     const existingSec = report?.reportedStatusCode?.slice(2, 4) || report?.secondaryCode || report?.SecondaryCode;
     const isLoading = segLoading[item.apiDate];
     const dateObj = parseDateFromApiDate(item.apiDate);
+    const isToday = item.apiDate === todayApiDate;
 
     return (
       <View
         style={[
           styles.dayCard,
-          { borderColor: isFilled ? '#1f3320' : colors.border },
+          { borderColor: isFilled ? '#1f3320' : isToday ? colors.accent : colors.border },
         ]}
       >
         {/* Left: date + day name */}
@@ -407,12 +415,12 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           <Text
             style={[
               styles.dayDateText,
-              { color: isFilled ? colors.success : colors.text },
+              { color: isFilled ? colors.success : isToday ? colors.accent : colors.text },
             ]}
           >
             {formatDisplayDate(item.apiDate)}
           </Text>
-          <Text style={styles.dayNameText}>{getDayName(dateObj)}</Text>
+          <Text style={[styles.dayNameText, isToday && { color: colors.accent }]}>{getDayName(dateObj)}</Text>
         </View>
 
         {/* Center: segmented control */}

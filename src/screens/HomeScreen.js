@@ -22,7 +22,7 @@ import {
   AuthError,
 } from '../api/doch1';
 import { getSecondaryLabel, STATUSES } from '../data/statuses';
-import { getUpcomingDates, monthsToQuery, toApiDate } from '../utils/dates';
+import { getUpcomingDates, monthsToQuery } from '../utils/dates';
 import { colors, spacing, radius } from '../theme';
 
 I18nManager.forceRTL(true);
@@ -62,13 +62,6 @@ function describeReport(report) {
   const secCode = report?.reportedStatusCode?.slice(2, 4) || report?.secondaryCode || report?.SecondaryCode;
   const sec = getSecondaryLabel(mainCode, secCode);
   return sec ? sec.statusDescription : `${mainCode}/${secCode}`;
-}
-
-function describeDefault(settings) {
-  const main = STATUSES.find((s) => s.statusCode === settings.mainCode);
-  const sec = getSecondaryLabel(settings.mainCode, settings.secondaryCode);
-  if (!main || !sec) return 'לא הוגדר';
-  return `${main.statusDescription} - ${sec.statusDescription}`;
 }
 
 const SEGMENT_OPTIONS = [

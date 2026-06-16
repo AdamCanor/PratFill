@@ -28,7 +28,20 @@ export default function TestConnectionScreen({ navigation }) {
       append(`Calling getFutureReport(${now.getMonth() + 1}, ${now.getFullYear()})...`);
       const res = await getFutureReports(now.getMonth() + 1, now.getFullYear());
       append('✅ Response received:');
-      append(JSON.stringify(res, null, 2).slice(0, 1500));
+      if (res?.days && res.days.length > 0) {
+        append(`✅ ${res.days.length} ימים מדווחים`);
+        if (res.minDate) append(`minDate: ${res.minDate}`);
+        if (res.maxDate) append(`maxDate: ${res.maxDate}`);
+        for (const day of res.days) {
+          const iso = day.date || '';
+          const ddmm = iso.length >= 10
+            ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}`
+            : iso;
+          append(`  • ${ddmm} — ${day.secondaryStatusReported || ''} (${day.reportedStatusCode || ''})`);
+        }
+      } else {
+        append(JSON.stringify(res, null, 2).slice(0, 1500));
+      }
     } catch (err) {
       if (err instanceof AuthError) {
         append(`❌ AuthError: ${err.message}`);

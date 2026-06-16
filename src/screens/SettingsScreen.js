@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Modal,
   I18nManager,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { STATUSES } from '../data/statuses';
@@ -30,6 +31,7 @@ export default function SettingsScreen({ navigation }) {
   const [modalDay, setModalDay] = useState(null);
   const [modalMain, setModalMain] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -71,7 +73,9 @@ export default function SettingsScreen({ navigation }) {
   };
 
   const onSave = async () => {
+    setSaving(true);
     await saveSettings({ weeklyDefaults });
+    setSaving(false);
     navigation.goBack();
   };
 
@@ -104,8 +108,16 @@ export default function SettingsScreen({ navigation }) {
 
       <View style={styles.footer}>
         <View style={styles.footerSeparator} />
-        <TouchableOpacity style={styles.saveBtn} onPress={onSave}>
-          <Text style={styles.saveBtnText}>שמירה</Text>
+        <TouchableOpacity
+          style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+          onPress={onSave}
+          disabled={saving}
+        >
+          {saving ? (
+            <ActivityIndicator color={colors.accentText} />
+          ) : (
+            <Text style={styles.saveBtnText}>שמירה</Text>
+          )}
         </TouchableOpacity>
       </View>
 

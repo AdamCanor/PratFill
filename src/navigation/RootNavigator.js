@@ -9,6 +9,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import TestConnectionScreen from '../screens/TestConnectionScreen';
 import { getUser, refreshStatuses } from '../api/doch1';
 import { colors } from '../theme';
+import { AccentProvider } from '../AccentContext';
 
 const Stack = createNativeStackNavigator();
 
@@ -53,6 +54,7 @@ export default function RootNavigator() {
   }
 
   return (
+    <AccentProvider>
     <NavigationContainer theme={navTheme}>
       <Stack.Navigator initialRouteName={initialRoute}>
         <Stack.Screen
@@ -78,5 +80,6 @@ export default function RootNavigator() {
         />
       </Stack.Navigator>
     </NavigationContainer>
+    </AccentProvider>
   );
 }

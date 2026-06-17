@@ -14,6 +14,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { STATUSES as FALLBACK_STATUSES } from '../data/statuses';
 import { getSettings, saveSettings, getCachedStatuses } from '../api/doch1';
 import { colors, spacing, radius } from '../theme';
+import { useAccent, ACCENT_PRESETS } from '../AccentContext';
 
 I18nManager.forceRTL(true);
 
@@ -32,6 +33,7 @@ function countSetDays(weeklyDefaults) {
 }
 
 export default function SettingsScreen({ navigation }) {
+  const { accent, setAccent } = useAccent();
   const [presets, setPresets] = useState([]);
   const [selectedPresetId, setSelectedPresetId] = useState(null);
   const [renamingPresetId, setRenamingPresetId] = useState(null);
@@ -161,9 +163,31 @@ export default function SettingsScreen({ navigation }) {
           ))}
 
           <TouchableOpacity style={styles.addPresetBtn} onPress={addPreset}>
-            <MaterialCommunityIcons name="plus" size={18} color={colors.accent} />
-            <Text style={styles.addPresetText}>הוסף תבנית</Text>
+            <MaterialCommunityIcons name="plus" size={18} color={accent} />
+            <Text style={[styles.addPresetText, { color: accent }]}>הוסף תבנית</Text>
           </TouchableOpacity>
+
+          <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>צבע ראשי</Text>
+          <View style={styles.swatchRow}>
+            {ACCENT_PRESETS.map((p) => {
+              const selected = accent === p.value;
+              return (
+                <TouchableOpacity
+                  key={p.value}
+                  onPress={() => setAccent(p.value)}
+                  style={[
+                    styles.swatch,
+                    { backgroundColor: p.value },
+                    selected && styles.swatchSelected,
+                  ]}
+                >
+                  {selected && (
+                    <MaterialCommunityIcons name="check" size={16} color="#000" />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </ScrollView>
 
         <View style={styles.footer}>
@@ -536,4 +560,21 @@ const styles = StyleSheet.create({
   modalClearText: { color: colors.danger, fontSize: 15 },
   modalCancel: { marginTop: spacing.md, alignItems: 'center' },
   modalCancelText: { color: colors.danger, fontSize: 15 },
+  swatchRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  swatch: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swatchSelected: {
+    borderWidth: 3,
+    borderColor: '#fff',
+  },
 });

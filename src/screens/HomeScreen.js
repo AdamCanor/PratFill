@@ -32,6 +32,7 @@ import {
 import { getSecondaryLabel, STATUSES as FALLBACK_STATUSES } from '../data/statuses';
 import { getUpcomingDates, monthsToQuery } from '../utils/dates';
 import { colors, spacing, radius } from '../theme';
+import { useAccent } from '../AccentContext';
 
 I18nManager.forceRTL(true);
 
@@ -99,7 +100,8 @@ function TeamUserRow({ user, onPress }) {
   const determined = !!user.isDetermined;
   const statusLabel = user.reportedSecondaryName || user.reportedMainName || 'לא מדווח';
   const icon = determined ? 'check-circle' : reported ? 'check-circle-outline' : 'circle-outline';
-  const iconColor = determined ? colors.success : reported ? colors.accent : colors.textMuted;
+  const { accent: teamAccent } = useAccent();
+  const iconColor = determined ? colors.success : reported ? teamAccent : colors.textMuted;
   return (
     <TouchableOpacity style={teamStyles.row} onPress={onPress} activeOpacity={0.7}>
       <View style={teamStyles.rowLeft}>
@@ -133,7 +135,7 @@ const teamStyles = StyleSheet.create({
   name: { color: colors.text, fontSize: 15, fontWeight: '600', textAlign: 'right' },
   status: { fontSize: 12, textAlign: 'right', marginTop: 2 },
   statusDetermined: { color: colors.success },
-  statusReported: { color: colors.accent },
+  statusReported: { color: colors.accent },  // overridden inline
   statusMissing: { color: colors.textMuted },
 });
 
@@ -141,6 +143,8 @@ const teamStyles = StyleSheet.create({
 
 export default function HomeScreen({ navigation, isCommanderProp = false }) {
   const insets = useSafeAreaInsets();
+  const { accent } = useAccent();
+  const styles = React.useMemo(() => makeStyles(accent), [accent]);
 
   const [loading, setLoading] = useState(false);
   const [filling, setFilling] = useState(false);
@@ -469,7 +473,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
     const iconName = isFilled
       ? (MAIN_CODE_ICONS[existingMain] || 'calendar-outline')
       : 'calendar-outline';
-    const iconColor = isFilled ? colors.accent : colors.textMuted;
+    const iconColor = isFilled ? accent : colors.textMuted;
 
     const statusLabel = isFilled ? (report.reportedMainName || report.secondaryStatusReported || describeReport(report)) : null;
 
@@ -477,7 +481,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
       <View
         style={[
           styles.dayCard,
-          { borderColor: isFilled ? '#1f3320' : isToday ? colors.accent : colors.border },
+          { borderColor: isFilled ? '#1f3320' : isToday ? accent : colors.border },
           isPastDeadline && { opacity: 0.7 },
         ]}
       >
@@ -496,13 +500,13 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
             <Text
               style={[
                 styles.dayDateText,
-                { color: isFilled ? colors.success : isToday ? colors.accent : colors.text },
+                { color: isFilled ? colors.success : isToday ? accent : colors.text },
               ]}
             >
               {formatDisplayDate(item.apiDate)}
             </Text>
           </View>
-          <Text style={[styles.dayNameText, isToday && { color: colors.accent }]}>{getDayName(dateObj)}</Text>
+          <Text style={[styles.dayNameText, isToday && { color: accent }]}>{getDayName(dateObj)}</Text>
           {isFilled && statusLabel ? (
             <Text style={styles.statusLabel} numberOfLines={1}>{statusLabel}</Text>
           ) : null}
@@ -511,7 +515,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
         {/* Center: segmented control */}
         <View style={styles.segmentRow}>
           {isLoading ? (
-            <ActivityIndicator color={colors.accent} size="small" />
+            <ActivityIndicator color={accent} size="small" />
           ) : (
             SEGMENT_OPTIONS.map((opt) => {
               const isActive =
@@ -606,7 +610,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
       {activeTab === 'team' ? (
         <View style={{ flex: 1 }}>
           {teamLoading ? (
-            <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.lg }} />
+            <ActivityIndicator color={accent} style={{ marginTop: spacing.lg }} />
           ) : teamError ? (
             <View style={styles.teamPlaceholder}>
               <Text style={styles.teamErrorText}>{teamError}</Text>
@@ -653,7 +657,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
 
           {/* Day list */}
           {loading ? (
-            <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.lg }} />
+            <ActivityIndicator color={accent} style={{ marginTop: spacing.lg }} />
           ) : (
             <FlatList
               data={upcoming}
@@ -720,7 +724,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
                 style={styles.modalBack}
                 onPress={() => { setModalMain(null); setModalSelectedSecondary(null); }}
               >
-                <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
+                <MaterialCommunityIcons name="arrow-right" size={16} color={accent} />
                 <Text style={styles.modalBackText}>
                   {statuses.find((s) => s.statusCode === modalMain)?.statusDescription}
                 </Text>
@@ -738,7 +742,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
                         {sec.statusDescription}
                       </Text>
                       {isSelected && (
-                        <MaterialCommunityIcons name="check" size={16} color={colors.accent} />
+                        <MaterialCommunityIcons name="check" size={16} color={accent} />
                       )}
                     </TouchableOpacity>
                   );
@@ -792,7 +796,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           </Text>
 
           {teamUpdating ? (
-            <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.lg }} />
+            <ActivityIndicator color={accent} style={{ marginVertical: spacing.lg }} />
           ) : teamModalMain === null ? (
             <ScrollView>
               {statuses.map((s) => (
@@ -811,7 +815,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
                 style={styles.modalBack}
                 onPress={() => setTeamModalMain(null)}
               >
-                <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
+                <MaterialCommunityIcons name="arrow-right" size={16} color={accent} />
                 <Text style={styles.modalBackText}>
                   {statuses.find((s) => s.statusCode === teamModalMain)?.statusDescription}
                 </Text>
@@ -877,7 +881,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (accent) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
 
   // top bar

@@ -34,6 +34,7 @@ function countSetDays(weeklyDefaults) {
 
 export default function SettingsScreen({ navigation }) {
   const { accent, setAccent } = useAccent();
+  const styles = React.useMemo(() => makeStyles(accent), [accent]);
   const [presets, setPresets] = useState([]);
   const [selectedPresetId, setSelectedPresetId] = useState(null);
   const [renamingPresetId, setRenamingPresetId] = useState(null);
@@ -216,7 +217,7 @@ export default function SettingsScreen({ navigation }) {
       {/* Back header */}
       <View style={styles.editorHeader}>
         <TouchableOpacity style={styles.backBtn} onPress={() => setSelectedPresetId(null)}>
-          <MaterialCommunityIcons name="arrow-right" size={20} color={colors.accent} />
+          <MaterialCommunityIcons name="arrow-right" size={20} color={accent} />
           <Text style={styles.backBtnText}>תבניות</Text>
         </TouchableOpacity>
 
@@ -258,7 +259,7 @@ export default function SettingsScreen({ navigation }) {
               <MaterialCommunityIcons
                 name="chevron-left"
                 size={20}
-                color={isSet ? colors.accent : colors.textMuted}
+                color={isSet ? accent : colors.textMuted}
               />
             </TouchableOpacity>
           );
@@ -322,7 +323,7 @@ export default function SettingsScreen({ navigation }) {
                 style={styles.modalBack}
                 onPress={() => setModalMain(null)}
               >
-                <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
+                <MaterialCommunityIcons name="arrow-right" size={16} color={accent} />
                 <Text style={styles.modalBackText}>
                   {statuses.find((s) => s.statusCode === modalMain)?.statusDescription}
                 </Text>
@@ -351,7 +352,7 @@ export default function SettingsScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (accent) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: spacing.xl },
 
@@ -407,12 +408,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: accent,
     borderStyle: 'dashed',
     marginTop: spacing.sm,
   },
   addPresetText: {
-    color: colors.accent,
+    color: accent,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -432,7 +433,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
   },
-  backBtnText: { color: colors.accent, fontSize: 14 },
+  backBtnText: { color: accent, fontSize: 14 },
   presetNameRow: {
     flex: 1,
     flexDirection: 'row',
@@ -454,7 +455,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: accent,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
   },
@@ -473,7 +474,7 @@ const styles = StyleSheet.create({
   },
   dayRowActive: {
     backgroundColor: '#2a2616',
-    borderColor: colors.accent,
+    borderColor: accent,
   },
   dayName: {
     color: colors.text,
@@ -489,7 +490,7 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.sm,
   },
   dayLabelSet: {
-    color: colors.accent,
+    color: accent,
   },
   dayLabelUnset: {
     color: colors.textMuted,
@@ -506,13 +507,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   saveBtn: {
-    backgroundColor: colors.accent,
+    backgroundColor: accent,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     alignItems: 'center',
   },
   saveBtnText: {
-    color: colors.accentText,
+    color: accentText,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -543,7 +544,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginBottom: spacing.sm,
   },
-  modalBackText: { color: colors.accent, fontSize: 14 },
+  modalBackText: { color: accent, fontSize: 14 },
   modalOption: {
     paddingVertical: spacing.md,
     borderBottomWidth: 1,

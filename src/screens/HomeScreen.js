@@ -910,16 +910,16 @@ const makeStyles = (accent) => StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
-  tabActive: { borderBottomColor: colors.accent },
+  tabActive: { borderBottomColor: accent },
   tabText: { color: colors.textMuted, fontSize: 14 },
-  tabTextActive: { color: colors.accent, fontWeight: '600' },
+  tabTextActive: { color: accent, fontWeight: '600' },
 
   // team placeholder
   teamPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   teamPlaceholderText: { color: colors.textMuted, fontSize: 16 },
   teamErrorText: { color: colors.danger, fontSize: 14, textAlign: 'center', paddingHorizontal: spacing.md },
   retryBtn: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
-  retryBtnText: { color: colors.accent, fontSize: 14 },
+  retryBtnText: { color: accent, fontSize: 14 },
 
   // summary row
   summaryRow: {
@@ -932,7 +932,7 @@ const makeStyles = (accent) => StyleSheet.create({
   summaryText: { fontSize: 13 },
   summaryMuted: { color: colors.textMuted },
   summaryCount: { color: colors.text },
-  markAllText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
+  markAllText: { color: accent, fontSize: 13, fontWeight: '600' },
 
   // day card
   dayCard: {
@@ -950,16 +950,16 @@ const makeStyles = (accent) => StyleSheet.create({
   dayDateRow: { flexDirection: 'row', alignItems: 'center' },
   dayDateText: { fontSize: 13, fontWeight: '700' },
   dayNameText: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  statusLabel: { color: colors.accent, fontSize: 10, marginTop: 2 },
+  statusLabel: { color: accent, fontSize: 10, marginTop: 2 },
   todayBadge: {
-    backgroundColor: colors.accent,
+    backgroundColor: accent,
     borderRadius: radius.sm,
     paddingHorizontal: 5,
     paddingVertical: 1,
     alignSelf: 'flex-start',
     marginBottom: 3,
   },
-  todayBadgeText: { color: colors.accentText, fontSize: 10, fontWeight: '700' },
+  todayBadgeText: { color: accentText, fontSize: 10, fontWeight: '700' },
 
   // segment
   segmentRow: {
@@ -978,9 +978,9 @@ const makeStyles = (accent) => StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
     borderColor: colors.border,
   },
-  segBtnActive: { backgroundColor: '#2a2616', borderColor: colors.accent },
+  segBtnActive: { backgroundColor: '#2a2616', borderColor: accent },
   segBtnText: { color: colors.textMuted, fontSize: 12 },
-  segBtnTextActive: { color: colors.accent },
+  segBtnTextActive: { color: accent },
 
   // edit icon
   editBtn: { marginStart: spacing.sm, padding: spacing.xs },
@@ -989,14 +989,14 @@ const makeStyles = (accent) => StyleSheet.create({
   bottomSection: { paddingHorizontal: spacing.md, paddingBottom: spacing.lg },
   separator: { height: 1, backgroundColor: colors.border, marginBottom: spacing.md },
   submitBtn: {
-    backgroundColor: colors.accent,
+    backgroundColor: accent,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     alignItems: 'center',
     marginBottom: spacing.xs,
   },
   submitBtnDisabled: { opacity: 0.6 },
-  submitBtnText: { color: colors.accentText, fontSize: 16, fontWeight: '700' },
+  submitBtnText: { color: accentText, fontSize: 16, fontWeight: '700' },
   submitMeta: { color: colors.textMuted, fontSize: 11, textAlign: 'center' },
 
   // modal
@@ -1026,7 +1026,7 @@ const makeStyles = (accent) => StyleSheet.create({
     gap: spacing.xs,
     marginBottom: spacing.sm,
   },
-  modalBackText: { color: colors.accent, fontSize: 14 },
+  modalBackText: { color: accent, fontSize: 14 },
   modalOption: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1036,14 +1036,14 @@ const makeStyles = (accent) => StyleSheet.create({
     borderBottomColor: colors.border,
   },
   modalOptionSelected: {
-    borderColor: colors.accent,
+    borderColor: accent,
     borderWidth: 1,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm,
     marginBottom: 2,
   },
   modalOptionText: { color: colors.text, fontSize: 15 },
-  modalOptionTextSelected: { color: colors.accent, fontWeight: '600' },
+  modalOptionTextSelected: { color: accent, fontWeight: '600' },
   modalCancel: { marginTop: spacing.md, alignItems: 'center' },
   modalCancelText: { color: colors.danger, fontSize: 15 },
 
@@ -1062,12 +1062,12 @@ const makeStyles = (accent) => StyleSheet.create({
     textAlignVertical: 'top',
   },
   confirmBtn: {
-    backgroundColor: colors.accent,
+    backgroundColor: accent,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     alignItems: 'center',
     marginTop: spacing.md,
   },
   confirmBtnDisabled: { opacity: 0.4 },
-  confirmBtnText: { color: colors.accentText, fontSize: 16, fontWeight: '700' },
+  confirmBtnText: { color: accentText, fontSize: 16, fontWeight: '700' },
 });

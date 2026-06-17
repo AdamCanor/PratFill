@@ -3,9 +3,7 @@
     "name": "דוח 67",
     "slug": "pratfill",
     "version": "1.0.0",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/90d63a31-d3d8-4a51-818a-10ad3e62b272"
     },

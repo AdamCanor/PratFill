@@ -2,7 +2,9 @@ name: Build Android APK
 
 on:
   push:
-    branches: [preprod]
+    branches: [preprod, 'claude/**']
+  pull_request:
+    branches: [main]
   workflow_dispatch: {}
 
 jobs:
@@ -52,3 +54,9 @@ jobs:
         with:
           name: pratfill-apk
           path: android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Publish OTA update
+        if: env.EXPO_TOKEN != ''
+        run: npx eas-cli update --branch dev --message "${{ github.event.head_commit.message || 'CI update' }}" --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

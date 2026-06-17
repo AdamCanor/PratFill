@@ -3,6 +3,12 @@
     "name": "דוח 67",
     "slug": "pratfill",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/90d63a31-d3d8-4a51-818a-10ad3e62b272"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -26,6 +32,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "90d63a31-d3d8-4a51-818a-10ad3e62b272"
+      }
     }
   }
 }

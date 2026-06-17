@@ -57,6 +57,6 @@ jobs:
 
       - name: Publish OTA update
         if: env.EXPO_TOKEN != ''
-        run: npx eas-cli update --branch dev --message "${{ github.event.head_commit.message || 'CI update' }}" --non-interactive
+        run: npx eas-cli update --branch production --message "${{ github.event.head_commit.message || 'CI update' }}" --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

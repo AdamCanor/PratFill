@@ -5,7 +5,10 @@
     "version": "1.0.0",
     "runtimeVersion": "1.0.0",
     "updates": {
-      "url": "https://u.expo.dev/90d63a31-d3d8-4a51-818a-10ad3e62b272"
+      "url": "https://u.expo.dev/90d63a31-d3d8-4a51-818a-10ad3e62b272",
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      }
     },
     "orientation": "portrait",
     "icon": "./assets/icon.png",

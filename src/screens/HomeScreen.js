@@ -11,7 +11,9 @@ import {
   I18nManager,
   ScrollView,
   StatusBar,
+  TextInput,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   getFutureReports,
@@ -82,6 +84,14 @@ const SEGMENT_OPTIONS = [
   { label: 'אחר', mainCode: null, secondaryCode: null },
 ];
 
+const MAIN_CODE_ICONS = {
+  '01': 'home-outline',
+  '02': 'map-marker-outline',
+  '04': 'umbrella-outline',
+  '05': 'pill',
+  '13': 'airplane',
+};
+
 // ── TeamUserRow ───────────────────────────────────────────────────────────
 
 function TeamUserRow({ user, onPress }) {
@@ -130,6 +140,8 @@ const teamStyles = StyleSheet.create({
 // ── component ─────────────────────────────────────────────────────────────
 
 export default function HomeScreen({ navigation, isCommanderProp = false }) {
+  const insets = useSafeAreaInsets();
+
   const [loading, setLoading] = useState(false);
   const [filling, setFilling] = useState(false);
   const [reports, setReports] = useState([]);
@@ -143,7 +155,13 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalDate, setModalDate] = useState(null);
   const [modalMain, setModalMain] = useState(null);
+  const [modalSelectedSecondary, setModalSelectedSecondary] = useState(null);
+  const [modalNote, setModalNote] = useState('');
   const [segLoading, setSegLoading] = useState({});
+
+  // presets state
+  const [weeklyPresets, setWeeklyPresets] = useState([]);
+  const [presetPickerVisible, setPresetPickerVisible] = useState(false);
 
   // team tab state
   const [teamLoading, setTeamLoading] = useState(false);
@@ -159,6 +177,15 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
     try {
       const s = await getSettings();
       setSettings(s);
+
+      // migrate presets
+      let presets = [];
+      if (s?.weeklyPresets && s.weeklyPresets.length > 0) {
+        presets = s.weeklyPresets;
+      } else if (s?.weeklyDefaults) {
+        presets = [{ id: 'default', name: 'ברירת מחדל', weeklyDefaults: s.weeklyDefaults }];
+      }
+      setWeeklyPresets(presets);
 
       const cached = await getCachedStatuses();
       if (cached && cached.length > 0) setStatuses(cached);
@@ -202,10 +229,10 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
     return unsub;
   }, [navigation, refresh]);
 
-  const onFillWeek = async () => {
-    const weeklyDefaults = settings?.weeklyDefaults;
+  const fillWithPreset = async (preset) => {
+    const weeklyDefaults = preset?.weeklyDefaults;
     if (!weeklyDefaults || Object.values(weeklyDefaults).every((v) => !v)) {
-      Alert.alert('אין דיווח קבוע', 'יש להגדיר דיווח קבוע בהגדרות לפני המילוי', [
+      Alert.alert('אין דיווח קבוע', 'התבנית ריקה — יש להגדיר ימים בהגדרות', [
         { text: 'ביטול', style: 'cancel' },
         { text: 'להגדרות', onPress: () => navigation.navigate('Settings') },
       ]);
@@ -217,7 +244,6 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
       const upcoming = getUpcomingDates(7);
       const existingDates = new Set(reports.map(normalizeDate));
 
-      // Only fill days that (a) have no report yet and (b) have a default set
       const toCreate = upcoming.filter((d) => {
         if (existingDates.has(d.apiDate)) return false;
         const dayOfWeek = new Date(
@@ -255,6 +281,22 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
     } finally {
       setFilling(false);
     }
+  };
+
+  const onFillWeek = async () => {
+    if (weeklyPresets.length === 0) {
+      Alert.alert('אין תבניות', 'יש להגדיר תבנית שבועית בהגדרות לפני המילוי', [
+        { text: 'ביטול', style: 'cancel' },
+        { text: 'להגדרות', onPress: () => navigation.navigate('Settings') },
+      ]);
+      return;
+    }
+    if (weeklyPresets.length === 1) {
+      await fillWithPreset(weeklyPresets[0]);
+      return;
+    }
+    // multiple presets — show picker
+    setPresetPickerVisible(true);
   };
 
   const loadTeam = async () => {
@@ -363,19 +405,31 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
   const openModal = (apiDate) => {
     setModalDate(apiDate);
     setModalMain(null);
+    setModalSelectedSecondary(null);
+    setModalNote('');
     setModalVisible(true);
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setModalSelectedSecondary(null);
+    setModalNote('');
   };
 
   const handleModalConfirm = async (secondaryCode) => {
     if (!modalDate || !modalMain || !secondaryCode) return;
     setModalVisible(false);
     setSegLoading((prev) => ({ ...prev, [modalDate]: true }));
+    const noteToSend = modalNote;
+    setModalNote('');
+    setModalSelectedSecondary(null);
     try {
       const existing = reports.find((r) => normalizeDate(r) === modalDate);
       if (existing) await deleteFutureReport(modalDate);
       await insertFutureReport({
         mainCode: modalMain,
         secondaryCode,
+        note: noteToSend,
         date: modalDate,
       });
       await refresh();
@@ -410,25 +464,48 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
     const isLoading = segLoading[item.apiDate];
     const dateObj = parseDateFromApiDate(item.apiDate);
     const isToday = item.apiDate === todayApiDate;
+    const isPastDeadline = isToday && new Date().getHours() >= 12;
+
+    const iconName = isFilled
+      ? (MAIN_CODE_ICONS[existingMain] || 'calendar-outline')
+      : 'calendar-outline';
+    const iconColor = isFilled ? colors.accent : colors.textMuted;
+
+    const statusLabel = isFilled ? (report.reportedMainName || report.secondaryStatusReported || describeReport(report)) : null;
 
     return (
       <View
         style={[
           styles.dayCard,
           { borderColor: isFilled ? '#1f3320' : isToday ? colors.accent : colors.border },
+          isPastDeadline && { opacity: 0.7 },
         ]}
       >
-        {/* Left: date + day name */}
+        {/* Left: icon + date + day name */}
         <View style={styles.dayLeft}>
-          <Text
-            style={[
-              styles.dayDateText,
-              { color: isFilled ? colors.success : isToday ? colors.accent : colors.text },
-            ]}
-          >
-            {formatDisplayDate(item.apiDate)}
-          </Text>
+          {isToday && (
+            <View style={styles.todayBadge}>
+              <Text style={styles.todayBadgeText}>היום</Text>
+            </View>
+          )}
+          <View style={styles.dayDateRow}>
+            <MaterialCommunityIcons name={iconName} size={16} color={iconColor} style={{ marginEnd: 3 }} />
+            {isPastDeadline && (
+              <MaterialCommunityIcons name="lock-outline" size={14} color={colors.textMuted} style={{ marginEnd: 3 }} />
+            )}
+            <Text
+              style={[
+                styles.dayDateText,
+                { color: isFilled ? colors.success : isToday ? colors.accent : colors.text },
+              ]}
+            >
+              {formatDisplayDate(item.apiDate)}
+            </Text>
+          </View>
           <Text style={[styles.dayNameText, isToday && { color: colors.accent }]}>{getDayName(dateObj)}</Text>
+          {isFilled && statusLabel ? (
+            <Text style={styles.statusLabel} numberOfLines={1}>{statusLabel}</Text>
+          ) : null}
         </View>
 
         {/* Center: segmented control */}
@@ -473,7 +550,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
       <StatusBar barStyle="light-content" />
 
       {/* Top bar */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
         {userName ? (
           <Text style={styles.userIdText}>{userName}</Text>
         ) : (
@@ -611,12 +688,12 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
         visible={modalVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={closeModal}
       >
         <TouchableOpacity
           style={styles.backdrop}
           activeOpacity={1}
-          onPress={() => setModalVisible(false)}
+          onPress={closeModal}
         />
         <View style={styles.modalSheet}>
           <Text style={styles.modalTitle}>
@@ -637,11 +714,11 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
               ))}
             </ScrollView>
           ) : (
-            // Step 2: pick secondary
-            <ScrollView>
+            // Step 2: pick secondary + note + confirm
+            <ScrollView keyboardShouldPersistTaps="handled">
               <TouchableOpacity
                 style={styles.modalBack}
-                onPress={() => setModalMain(null)}
+                onPress={() => { setModalMain(null); setModalSelectedSecondary(null); }}
               >
                 <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
                 <Text style={styles.modalBackText}>
@@ -649,27 +726,52 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
                 </Text>
               </TouchableOpacity>
               {(statuses.find((s) => s.statusCode === modalMain)?.secondaries || []).map(
-                (sec) => (
-                  <TouchableOpacity
-                    key={sec.statusCode}
-                    style={styles.modalOption}
-                    onPress={() => handleModalConfirm(sec.statusCode)}
-                  >
-                    <Text style={styles.modalOptionText}>{sec.statusDescription}</Text>
-                  </TouchableOpacity>
-                )
+                (sec) => {
+                  const isSelected = modalSelectedSecondary === sec.statusCode;
+                  return (
+                    <TouchableOpacity
+                      key={sec.statusCode}
+                      style={[styles.modalOption, isSelected && styles.modalOptionSelected]}
+                      onPress={() => setModalSelectedSecondary(sec.statusCode)}
+                    >
+                      <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextSelected]}>
+                        {sec.statusDescription}
+                      </Text>
+                      {isSelected && (
+                        <MaterialCommunityIcons name="check" size={16} color={colors.accent} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                }
               )}
+              <TextInput
+                style={styles.noteInput}
+                placeholder="הערה (אופציונלי)"
+                placeholderTextColor={colors.textMuted}
+                value={modalNote}
+                onChangeText={setModalNote}
+                textAlign="right"
+                multiline
+              />
+              <TouchableOpacity
+                style={[styles.confirmBtn, !modalSelectedSecondary && styles.confirmBtnDisabled]}
+                onPress={() => modalSelectedSecondary && handleModalConfirm(modalSelectedSecondary)}
+                disabled={!modalSelectedSecondary}
+              >
+                <Text style={styles.confirmBtnText}>אשר</Text>
+              </TouchableOpacity>
             </ScrollView>
           )}
 
           <TouchableOpacity
             style={styles.modalCancel}
-            onPress={() => setModalVisible(false)}
+            onPress={closeModal}
           >
             <Text style={styles.modalCancelText}>ביטול</Text>
           </TouchableOpacity>
         </View>
       </Modal>
+
       {/* Team status picker modal */}
       <Modal
         visible={teamModalVisible}
@@ -734,6 +836,43 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           </TouchableOpacity>
         </View>
       </Modal>
+
+      {/* Preset picker modal */}
+      <Modal
+        visible={presetPickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPresetPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={() => setPresetPickerVisible(false)}
+        />
+        <View style={styles.modalSheet}>
+          <Text style={styles.modalTitle}>בחר תבנית שבועית</Text>
+          <ScrollView>
+            {weeklyPresets.map((preset) => (
+              <TouchableOpacity
+                key={preset.id}
+                style={styles.modalOption}
+                onPress={() => {
+                  setPresetPickerVisible(false);
+                  fillWithPreset(preset);
+                }}
+              >
+                <Text style={styles.modalOptionText}>{preset.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <TouchableOpacity
+            style={styles.modalCancel}
+            onPress={() => setPresetPickerVisible(false)}
+          >
+            <Text style={styles.modalCancelText}>ביטול</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -747,7 +886,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.lg,
     paddingBottom: spacing.sm,
   },
   userIdText: { color: colors.textMuted, fontSize: 13 },
@@ -804,9 +942,20 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
   },
-  dayLeft: { width: 44, marginEnd: spacing.sm },
+  dayLeft: { width: 60, marginEnd: spacing.sm },
+  dayDateRow: { flexDirection: 'row', alignItems: 'center' },
   dayDateText: { fontSize: 13, fontWeight: '700' },
   dayNameText: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  statusLabel: { color: colors.accent, fontSize: 10, marginTop: 2 },
+  todayBadge: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.sm,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    alignSelf: 'flex-start',
+    marginBottom: 3,
+  },
+  todayBadgeText: { color: colors.accentText, fontSize: 10, fontWeight: '700' },
 
   // segment
   segmentRow: {
@@ -875,11 +1024,46 @@ const styles = StyleSheet.create({
   },
   modalBackText: { color: colors.accent, fontSize: 14 },
   modalOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  modalOptionSelected: {
+    borderColor: colors.accent,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    marginBottom: 2,
+  },
   modalOptionText: { color: colors.text, fontSize: 15 },
+  modalOptionTextSelected: { color: colors.accent, fontWeight: '600' },
   modalCancel: { marginTop: spacing.md, alignItems: 'center' },
   modalCancelText: { color: colors.danger, fontSize: 15 },
+
+  // note input
+  noteInput: {
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    color: colors.text,
+    fontSize: 14,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.md,
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  confirmBtn: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  confirmBtnDisabled: { opacity: 0.4 },
+  confirmBtnText: { color: colors.accentText, fontSize: 16, fontWeight: '700' },
 });

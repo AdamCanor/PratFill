@@ -9,23 +9,12 @@ import SettingsScreen from '../screens/SettingsScreen';
 import TestConnectionScreen from '../screens/TestConnectionScreen';
 import { getUser, refreshStatuses } from '../api/doch1';
 import { colors } from '../theme';
-import { AccentProvider } from '../AccentContext';
+import { useTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator();
 
-const navTheme = {
-  ...DarkTheme,
-  colors: {
-    ...DarkTheme.colors,
-    background: colors.bg,
-    card: colors.surface,
-    text: colors.text,
-    border: colors.border,
-    primary: colors.accent,
-  },
-};
-
 export default function RootNavigator() {
+  const { accentColor } = useTheme();
   const [initialRoute, setInitialRoute] = useState(null);
   const [isCommander, setIsCommander] = useState(false);
 
@@ -38,6 +27,18 @@ export default function RootNavigator() {
     })();
   }, []);
 
+  const navTheme = {
+    ...DarkTheme,
+    colors: {
+      ...DarkTheme.colors,
+      background: colors.bg,
+      card: colors.surface,
+      text: colors.text,
+      border: colors.border,
+      primary: accentColor,
+    },
+  };
+
   if (!initialRoute) {
     return (
       <View
@@ -48,13 +49,12 @@ export default function RootNavigator() {
           justifyContent: 'center',
         }}
       >
-        <ActivityIndicator color={colors.accent} size="large" />
+        <ActivityIndicator color={accentColor} size="large" />
       </View>
     );
   }
 
   return (
-    <AccentProvider>
     <NavigationContainer theme={navTheme}>
       <Stack.Navigator initialRouteName={initialRoute}>
         <Stack.Screen
@@ -80,6 +80,5 @@ export default function RootNavigator() {
         />
       </Stack.Navigator>
     </NavigationContainer>
-    </AccentProvider>
   );
 }

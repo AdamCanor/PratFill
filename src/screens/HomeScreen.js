@@ -32,7 +32,7 @@ import {
 import { getSecondaryLabel, STATUSES as FALLBACK_STATUSES } from '../data/statuses';
 import { getUpcomingDates, monthsToQuery } from '../utils/dates';
 import { colors, spacing, radius } from '../theme';
-import { useAccent } from '../AccentContext';
+import { useTheme } from '../context/ThemeContext';
 
 I18nManager.forceRTL(true);
 
@@ -42,7 +42,6 @@ function getDayName(date) {
 }
 
 function formatDisplayDate(apiDate) {
-  // apiDate is DD.MM.YYYY — show DD.MM only
   const parts = apiDate.split('.');
   return `${parts[0]}.${parts[1]}`;
 }
@@ -52,12 +51,9 @@ function parseDateFromApiDate(apiDate) {
   return new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
 }
 
-// ── preserve existing logic ────────────────────────────────────────────────
-
 function normalizeDate(report) {
   const raw = report?.date;
   if (!raw) return '';
-  // API returns ISO string "2026-06-17T00:00:00" — convert to DD.MM.YYYY
   const d = new Date(raw);
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -72,7 +68,6 @@ function getSecondaryLabelFromList(statuses, mainCode, secondaryCode) {
 
 function describeReport(report) {
   if (report?.secondaryStatusReported) return report.secondaryStatusReported;
-  // fallback for unexpected shapes
   const mainCode = report?.reportedStatusCode?.slice(0, 2) || report?.mainCode || report?.MainCode;
   const secCode = report?.reportedStatusCode?.slice(2, 4) || report?.secondaryCode || report?.SecondaryCode;
   const sec = getSecondaryLabelFromList(FALLBACK_STATUSES, mainCode, secCode);
@@ -96,12 +91,12 @@ const MAIN_CODE_ICONS = {
 // ── TeamUserRow ───────────────────────────────────────────────────────────
 
 function TeamUserRow({ user, onPress }) {
+  const { accentColor } = useTheme();
   const reported = !!user.reportedMainCode;
   const determined = !!user.isDetermined;
   const statusLabel = user.reportedSecondaryName || user.reportedMainName || 'לא מדווח';
   const icon = determined ? 'check-circle' : reported ? 'check-circle-outline' : 'circle-outline';
-  const { accent: teamAccent } = useAccent();
-  const iconColor = determined ? colors.success : reported ? teamAccent : colors.textMuted;
+  const iconColor = determined ? colors.success : reported ? accentColor : colors.textMuted;
   return (
     <TouchableOpacity style={teamStyles.row} onPress={onPress} activeOpacity={0.7}>
       <View style={teamStyles.rowLeft}>
@@ -109,7 +104,12 @@ function TeamUserRow({ user, onPress }) {
       </View>
       <View style={teamStyles.rowCenter}>
         <Text style={teamStyles.name}>{user.firstName} {user.lastName}</Text>
-        <Text style={[teamStyles.status, determined ? teamStyles.statusDetermined : reported ? teamStyles.statusReported : teamStyles.statusMissing]}>
+        <Text style={[
+          teamStyles.status,
+          determined ? teamStyles.statusDetermined :
+          reported ? { color: accentColor } :
+          teamStyles.statusMissing,
+        ]}>
           {statusLabel}
         </Text>
       </View>
@@ -135,7 +135,6 @@ const teamStyles = StyleSheet.create({
   name: { color: colors.text, fontSize: 15, fontWeight: '600', textAlign: 'right' },
   status: { fontSize: 12, textAlign: 'right', marginTop: 2 },
   statusDetermined: { color: colors.success },
-  statusReported: { color: colors.accent },  // overridden inline
   statusMissing: { color: colors.textMuted },
 });
 
@@ -143,10 +142,11 @@ const teamStyles = StyleSheet.create({
 
 export default function HomeScreen({ navigation, isCommanderProp = false }) {
   const insets = useSafeAreaInsets();
-  const { accent } = useAccent();
-  const styles = React.useMemo(() => makeStyles(accent), [accent]);
+  const { accentColor, accentTextColor } = useTheme();
+  const styles = React.useMemo(() => makeStyles(accentColor, accentTextColor), [accentColor, accentTextColor]);
 
-  const [loading, setLoading] = useState(false);
+  // loading=true so spinner shows immediately on mount — no flash of empty list
+  const [loading, setLoading] = useState(true);
   const [filling, setFilling] = useState(false);
   const [reports, setReports] = useState([]);
   const [settings, setSettings] = useState(null);
@@ -154,7 +154,6 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
   const [userName, setUserName] = useState(null);
   const [isCommander, setIsCommander] = useState(isCommanderProp);
 
-  // new UI state
   const [activeTab, setActiveTab] = useState('personal');
   const [modalVisible, setModalVisible] = useState(false);
   const [modalDate, setModalDate] = useState(null);
@@ -182,7 +181,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
       const s = await getSettings();
       setSettings(s);
 
-      // migrate presets
+      // migrate from old weeklyDefaults to new weeklyPresets
       let presets = [];
       if (s?.weeklyPresets && s.weeklyPresets.length > 0) {
         presets = s.weeklyPresets;
@@ -299,7 +298,6 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
       await fillWithPreset(weeklyPresets[0]);
       return;
     }
-    // multiple presets — show picker
     setPresetPickerVisible(true);
   };
 
@@ -354,19 +352,6 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
       Alert.alert('שגיאה', err.message);
     } finally {
       setTeamUpdating(false);
-    }
-  };
-
-  const onDelete = async (apiDate) => {
-    try {
-      await deleteFutureReport(apiDate);
-      await refresh();
-    } catch (err) {
-      if (err instanceof AuthError) {
-        navigation.replace('Login');
-        return;
-      }
-      Alert.alert('שגיאה במחיקה', err.message);
     }
   };
 
@@ -473,19 +458,20 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
     const iconName = isFilled
       ? (MAIN_CODE_ICONS[existingMain] || 'calendar-outline')
       : 'calendar-outline';
-    const iconColor = isFilled ? accent : colors.textMuted;
-
-    const statusLabel = isFilled ? (report.reportedMainName || report.secondaryStatusReported || describeReport(report)) : null;
+    const iconColor = isFilled ? accentColor : colors.textMuted;
+    const statusLabel = isFilled
+      ? (report.reportedMainName || report.secondaryStatusReported || describeReport(report))
+      : null;
 
     return (
       <View
         style={[
           styles.dayCard,
-          { borderColor: isFilled ? '#1f3320' : isToday ? accent : colors.border },
+          { borderColor: isFilled ? '#1f3320' : isToday ? accentColor : colors.border },
           isPastDeadline && { opacity: 0.7 },
         ]}
       >
-        {/* Left: icon + date + day name */}
+        {/* Left: icon + date + day name + status */}
         <View style={styles.dayLeft}>
           {isToday && (
             <View style={styles.todayBadge}>
@@ -500,14 +486,16 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
             <Text
               style={[
                 styles.dayDateText,
-                { color: isFilled ? colors.success : isToday ? accent : colors.text },
+                { color: isFilled ? colors.success : isToday ? accentColor : colors.text },
               ]}
             >
               {formatDisplayDate(item.apiDate)}
             </Text>
           </View>
-          <Text style={[styles.dayNameText, isToday && { color: accent }]}>{getDayName(dateObj)}</Text>
-          {isFilled && statusLabel ? (
+          <Text style={[styles.dayNameText, isToday && { color: accentColor }]}>
+            {getDayName(dateObj)}
+          </Text>
+          {statusLabel && !isLoading ? (
             <Text style={styles.statusLabel} numberOfLines={1}>{statusLabel}</Text>
           ) : null}
         </View>
@@ -515,7 +503,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
         {/* Center: segmented control */}
         <View style={styles.segmentRow}>
           {isLoading ? (
-            <ActivityIndicator color={accent} size="small" />
+            <ActivityIndicator color={accentColor} size="small" />
           ) : (
             SEGMENT_OPTIONS.map((opt) => {
               const isActive =
@@ -588,9 +576,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           style={[styles.tab, activeTab === 'personal' && styles.tabActive]}
           onPress={() => setActiveTab('personal')}
         >
-          <Text
-            style={[styles.tabText, activeTab === 'personal' && styles.tabTextActive]}
-          >
+          <Text style={[styles.tabText, activeTab === 'personal' && styles.tabTextActive]}>
             דיווח אישי עתידי
           </Text>
         </TouchableOpacity>
@@ -610,7 +596,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
       {activeTab === 'team' ? (
         <View style={{ flex: 1 }}>
           {teamLoading ? (
-            <ActivityIndicator color={accent} style={{ marginTop: spacing.lg }} />
+            <ActivityIndicator color={accentColor} style={{ marginTop: spacing.lg }} />
           ) : teamError ? (
             <View style={styles.teamPlaceholder}>
               <Text style={styles.teamErrorText}>{teamError}</Text>
@@ -657,7 +643,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
 
           {/* Day list */}
           {loading ? (
-            <ActivityIndicator color={accent} style={{ marginTop: spacing.lg }} />
+            <ActivityIndicator color={accentColor} style={{ marginTop: spacing.lg }} />
           ) : (
             <FlatList
               data={upcoming}
@@ -677,7 +663,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
               disabled={filling}
             >
               {filling ? (
-                <ActivityIndicator color={colors.accentText} />
+                <ActivityIndicator color={accentTextColor} />
               ) : (
                 <Text style={styles.submitBtnText}>הגש דוח 1 — (עד שעה 11:55)</Text>
               )}
@@ -694,18 +680,13 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
         animationType="slide"
         onRequestClose={closeModal}
       >
-        <TouchableOpacity
-          style={styles.backdrop}
-          activeOpacity={1}
-          onPress={closeModal}
-        />
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={closeModal} />
         <View style={styles.modalSheet}>
           <Text style={styles.modalTitle}>
             {modalDate ? `בחר דיווח ל-${formatDisplayDate(modalDate)}` : 'בחר דיווח'}
           </Text>
 
           {modalMain === null ? (
-            // Step 1: pick main status
             <ScrollView>
               {statuses.map((s) => (
                 <TouchableOpacity
@@ -718,36 +699,33 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
               ))}
             </ScrollView>
           ) : (
-            // Step 2: pick secondary + note + confirm
             <ScrollView keyboardShouldPersistTaps="handled">
               <TouchableOpacity
                 style={styles.modalBack}
                 onPress={() => { setModalMain(null); setModalSelectedSecondary(null); }}
               >
-                <MaterialCommunityIcons name="arrow-right" size={16} color={accent} />
+                <MaterialCommunityIcons name="arrow-right" size={16} color={accentColor} />
                 <Text style={styles.modalBackText}>
                   {statuses.find((s) => s.statusCode === modalMain)?.statusDescription}
                 </Text>
               </TouchableOpacity>
-              {(statuses.find((s) => s.statusCode === modalMain)?.secondaries || []).map(
-                (sec) => {
-                  const isSelected = modalSelectedSecondary === sec.statusCode;
-                  return (
-                    <TouchableOpacity
-                      key={sec.statusCode}
-                      style={[styles.modalOption, isSelected && styles.modalOptionSelected]}
-                      onPress={() => setModalSelectedSecondary(sec.statusCode)}
-                    >
-                      <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextSelected]}>
-                        {sec.statusDescription}
-                      </Text>
-                      {isSelected && (
-                        <MaterialCommunityIcons name="check" size={16} color={accent} />
-                      )}
-                    </TouchableOpacity>
-                  );
-                }
-              )}
+              {(statuses.find((s) => s.statusCode === modalMain)?.secondaries || []).map((sec) => {
+                const isSelected = modalSelectedSecondary === sec.statusCode;
+                return (
+                  <TouchableOpacity
+                    key={sec.statusCode}
+                    style={[styles.modalOption, isSelected && styles.modalOptionSelected]}
+                    onPress={() => setModalSelectedSecondary(sec.statusCode)}
+                  >
+                    <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextSelected]}>
+                      {sec.statusDescription}
+                    </Text>
+                    {isSelected && (
+                      <MaterialCommunityIcons name="check" size={16} color={accentColor} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
               <TextInput
                 style={styles.noteInput}
                 placeholder="הערה (אופציונלי)"
@@ -767,10 +745,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
             </ScrollView>
           )}
 
-          <TouchableOpacity
-            style={styles.modalCancel}
-            onPress={closeModal}
-          >
+          <TouchableOpacity style={styles.modalCancel} onPress={closeModal}>
             <Text style={styles.modalCancelText}>ביטול</Text>
           </TouchableOpacity>
         </View>
@@ -796,7 +771,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           </Text>
 
           {teamUpdating ? (
-            <ActivityIndicator color={accent} style={{ marginVertical: spacing.lg }} />
+            <ActivityIndicator color={accentColor} style={{ marginVertical: spacing.lg }} />
           ) : teamModalMain === null ? (
             <ScrollView>
               {statuses.map((s) => (
@@ -815,7 +790,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
                 style={styles.modalBack}
                 onPress={() => setTeamModalMain(null)}
               >
-                <MaterialCommunityIcons name="arrow-right" size={16} color={accent} />
+                <MaterialCommunityIcons name="arrow-right" size={16} color={accentColor} />
                 <Text style={styles.modalBackText}>
                   {statuses.find((s) => s.statusCode === teamModalMain)?.statusDescription}
                 </Text>
@@ -881,10 +856,9 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
   );
 }
 
-const makeStyles = (accent) => StyleSheet.create({
+const makeStyles = (accent, accentText) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
 
-  // top bar
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -896,7 +870,6 @@ const makeStyles = (accent) => StyleSheet.create({
   topIcons: { flexDirection: 'row', gap: spacing.sm },
   iconBtn: { padding: spacing.xs },
 
-  // tabs
   tabRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
@@ -914,14 +887,12 @@ const makeStyles = (accent) => StyleSheet.create({
   tabText: { color: colors.textMuted, fontSize: 14 },
   tabTextActive: { color: accent, fontWeight: '600' },
 
-  // team placeholder
   teamPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   teamPlaceholderText: { color: colors.textMuted, fontSize: 16 },
   teamErrorText: { color: colors.danger, fontSize: 14, textAlign: 'center', paddingHorizontal: spacing.md },
   retryBtn: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
   retryBtnText: { color: accent, fontSize: 14 },
 
-  // summary row
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -934,7 +905,6 @@ const makeStyles = (accent) => StyleSheet.create({
   summaryCount: { color: colors.text },
   markAllText: { color: accent, fontSize: 13, fontWeight: '600' },
 
-  // day card
   dayCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -961,7 +931,6 @@ const makeStyles = (accent) => StyleSheet.create({
   },
   todayBadgeText: { color: accentText, fontSize: 10, fontWeight: '700' },
 
-  // segment
   segmentRow: {
     flex: 1,
     flexDirection: 'row',
@@ -978,14 +947,12 @@ const makeStyles = (accent) => StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
     borderColor: colors.border,
   },
-  segBtnActive: { backgroundColor: '#2a2616', borderColor: accent },
+  segBtnActive: { backgroundColor: accent + '22', borderColor: accent },
   segBtnText: { color: colors.textMuted, fontSize: 12 },
   segBtnTextActive: { color: accent },
 
-  // edit icon
   editBtn: { marginStart: spacing.sm, padding: spacing.xs },
 
-  // bottom CTA
   bottomSection: { paddingHorizontal: spacing.md, paddingBottom: spacing.lg },
   separator: { height: 1, backgroundColor: colors.border, marginBottom: spacing.md },
   submitBtn: {
@@ -999,11 +966,7 @@ const makeStyles = (accent) => StyleSheet.create({
   submitBtnText: { color: accentText, fontSize: 16, fontWeight: '700' },
   submitMeta: { color: colors.textMuted, fontSize: 11, textAlign: 'center' },
 
-  // modal
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
   modalSheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.lg,
@@ -1047,7 +1010,6 @@ const makeStyles = (accent) => StyleSheet.create({
   modalCancel: { marginTop: spacing.md, alignItems: 'center' },
   modalCancelText: { color: colors.danger, fontSize: 15 },
 
-  // note input
   noteInput: {
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.md,

@@ -14,7 +14,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { STATUSES as FALLBACK_STATUSES } from '../data/statuses';
 import { getSettings, saveSettings, getCachedStatuses } from '../api/doch1';
 import { colors, spacing, radius } from '../theme';
-import { useAccent, ACCENT_PRESETS } from '../AccentContext';
+import { useTheme, ACCENT_PRESETS } from '../context/ThemeContext';
 
 I18nManager.forceRTL(true);
 
@@ -33,8 +33,9 @@ function countSetDays(weeklyDefaults) {
 }
 
 export default function SettingsScreen({ navigation }) {
-  const { accent, setAccent } = useAccent();
-  const styles = React.useMemo(() => makeStyles(accent), [accent]);
+  const { accentColor, accentTextColor, setAccent } = useTheme();
+  const styles = React.useMemo(() => makeStyles(accentColor, accentTextColor), [accentColor, accentTextColor]);
+
   const [presets, setPresets] = useState([]);
   const [selectedPresetId, setSelectedPresetId] = useState(null);
   const [renamingPresetId, setRenamingPresetId] = useState(null);
@@ -164,26 +165,27 @@ export default function SettingsScreen({ navigation }) {
           ))}
 
           <TouchableOpacity style={styles.addPresetBtn} onPress={addPreset}>
-            <MaterialCommunityIcons name="plus" size={18} color={accent} />
-            <Text style={[styles.addPresetText, { color: accent }]}>הוסף תבנית</Text>
+            <MaterialCommunityIcons name="plus" size={18} color={accentColor} />
+            <Text style={styles.addPresetText}>הוסף תבנית</Text>
           </TouchableOpacity>
 
           <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>צבע ראשי</Text>
           <View style={styles.swatchRow}>
-            {ACCENT_PRESETS.map((p) => {
-              const selected = accent === p.value;
+            {ACCENT_PRESETS.map((preset, i) => {
+              const selected = accentColor === preset.color;
               return (
                 <TouchableOpacity
-                  key={p.value}
-                  onPress={() => setAccent(p.value)}
+                  key={i}
+                  onPress={() => setAccent(preset)}
                   style={[
                     styles.swatch,
-                    { backgroundColor: p.value },
+                    { backgroundColor: preset.color },
                     selected && styles.swatchSelected,
                   ]}
+                  activeOpacity={0.8}
                 >
                   {selected && (
-                    <MaterialCommunityIcons name="check" size={16} color="#000" />
+                    <MaterialCommunityIcons name="check" size={16} color={preset.text} />
                   )}
                 </TouchableOpacity>
               );
@@ -199,7 +201,7 @@ export default function SettingsScreen({ navigation }) {
             disabled={saving}
           >
             {saving ? (
-              <ActivityIndicator color={colors.accentText} />
+              <ActivityIndicator color={accentTextColor} />
             ) : (
               <Text style={styles.saveBtnText}>שמירה</Text>
             )}
@@ -214,10 +216,9 @@ export default function SettingsScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* Back header */}
       <View style={styles.editorHeader}>
         <TouchableOpacity style={styles.backBtn} onPress={() => setSelectedPresetId(null)}>
-          <MaterialCommunityIcons name="arrow-right" size={20} color={accent} />
+          <MaterialCommunityIcons name="arrow-right" size={20} color={accentColor} />
           <Text style={styles.backBtnText}>תבניות</Text>
         </TouchableOpacity>
 
@@ -242,6 +243,7 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.sectionTitle}>דיווח שבועי קבוע</Text>
         {DAY_NAMES.map((dayName, dayIndex) => {
           const label = getDayLabel(statuses, weeklyDefaults, dayIndex);
           const isSet = !!label;
@@ -259,7 +261,7 @@ export default function SettingsScreen({ navigation }) {
               <MaterialCommunityIcons
                 name="chevron-left"
                 size={20}
-                color={isSet ? accent : colors.textMuted}
+                color={isSet ? accentColor : colors.textMuted}
               />
             </TouchableOpacity>
           );
@@ -274,7 +276,7 @@ export default function SettingsScreen({ navigation }) {
           disabled={saving}
         >
           {saving ? (
-            <ActivityIndicator color={colors.accentText} />
+            <ActivityIndicator color={accentTextColor} />
           ) : (
             <Text style={styles.saveBtnText}>שמירה</Text>
           )}
@@ -300,7 +302,6 @@ export default function SettingsScreen({ navigation }) {
           </Text>
 
           {modalMain === null ? (
-            // Step 1: pick main status
             <ScrollView>
               {statuses.map((s) => (
                 <TouchableOpacity
@@ -317,13 +318,12 @@ export default function SettingsScreen({ navigation }) {
               </TouchableOpacity>
             </ScrollView>
           ) : (
-            // Step 2: pick secondary
             <ScrollView>
               <TouchableOpacity
                 style={styles.modalBack}
                 onPress={() => setModalMain(null)}
               >
-                <MaterialCommunityIcons name="arrow-right" size={16} color={accent} />
+                <MaterialCommunityIcons name="arrow-right" size={16} color={accentColor} />
                 <Text style={styles.modalBackText}>
                   {statuses.find((s) => s.statusCode === modalMain)?.statusDescription}
                 </Text>
@@ -352,16 +352,18 @@ export default function SettingsScreen({ navigation }) {
   );
 }
 
-const makeStyles = (accent) => StyleSheet.create({
+const makeStyles = (accent, accentText) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: spacing.xl },
 
   sectionTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '700',
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
     textAlign: 'right',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
 
   // preset list
@@ -416,6 +418,25 @@ const makeStyles = (accent) => StyleSheet.create({
     color: accent,
     fontSize: 14,
     fontWeight: '600',
+  },
+
+  // accent color swatches
+  swatchRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  swatch: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swatchSelected: {
+    borderWidth: 3,
+    borderColor: '#fff',
   },
 
   // editor header
@@ -473,7 +494,7 @@ const makeStyles = (accent) => StyleSheet.create({
     marginBottom: spacing.sm,
   },
   dayRowActive: {
-    backgroundColor: '#2a2616',
+    backgroundColor: accent + '22',
     borderColor: accent,
   },
   dayName: {
@@ -561,21 +582,4 @@ const makeStyles = (accent) => StyleSheet.create({
   modalClearText: { color: colors.danger, fontSize: 15 },
   modalCancel: { marginTop: spacing.md, alignItems: 'center' },
   modalCancelText: { color: colors.danger, fontSize: 15 },
-  swatchRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  swatch: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  swatchSelected: {
-    borderWidth: 3,
-    borderColor: '#fff',
-  },
 });

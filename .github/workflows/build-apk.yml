@@ -47,10 +47,16 @@ jobs:
 
       - name: Build release APK
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon --parallel
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v5
         with:
           name: pratfill-apk
           path: android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Publish OTA update
+        if: env.EXPO_TOKEN != ''
+        run: npx eas-cli update --branch production --message "${{ github.event.head_commit.message || 'CI update' }}" --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

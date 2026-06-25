@@ -13,6 +13,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { STATUSES as FALLBACK_STATUSES } from '../data/statuses';
 import { getSettings, saveSettings, getCachedStatuses } from '../api/doch1';
 import { colors, spacing, radius } from '../theme';
+import { useTheme, ACCENT_PRESETS } from '../context/ThemeContext';
 
 I18nManager.forceRTL(true);
 
@@ -27,6 +28,8 @@ function getDayLabel(statuses, defaults, day) {
 }
 
 export default function SettingsScreen({ navigation }) {
+  const { accentColor, accentTextColor, setAccent } = useTheme();
+
   const [weeklyDefaults, setWeeklyDefaults] = useState({});
   const [modalDay, setModalDay] = useState(null);
   const [modalMain, setModalMain] = useState(null);
@@ -85,24 +88,53 @@ export default function SettingsScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
+
+        {/* Accent color picker */}
+        <Text style={styles.sectionTitle}>צבע מבטא</Text>
+        <View style={styles.swatchRow}>
+          {ACCENT_PRESETS.map((preset, i) => (
+            <TouchableOpacity
+              key={i}
+              style={[
+                styles.swatch,
+                { backgroundColor: preset.color },
+                accentColor === preset.color && styles.swatchSelected,
+              ]}
+              onPress={() => setAccent(preset)}
+              activeOpacity={0.8}
+            >
+              {accentColor === preset.color && (
+                <MaterialCommunityIcons name="check" size={18} color={preset.text} />
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* Weekly defaults */}
+        <Text style={styles.sectionTitle}>דיווח שבועי קבוע</Text>
         {DAY_NAMES.map((dayName, dayIndex) => {
           const label = getDayLabel(statuses, weeklyDefaults, dayIndex);
           const isSet = !!label;
           return (
             <TouchableOpacity
               key={dayIndex}
-              style={[styles.dayRow, isSet && styles.dayRowActive]}
+              style={[
+                styles.dayRow,
+                isSet && [styles.dayRowActive, { borderColor: accentColor, backgroundColor: accentColor + '15' }],
+              ]}
               onPress={() => openModal(dayIndex)}
               activeOpacity={0.7}
             >
               <Text style={styles.dayName}>{dayName}</Text>
-              <Text style={[styles.dayLabel, isSet ? styles.dayLabelSet : styles.dayLabelUnset]}>
+              <Text style={[styles.dayLabel, isSet ? [styles.dayLabelSet, { color: accentColor }] : styles.dayLabelUnset]}>
                 {label || 'לא מוגדר'}
               </Text>
               <MaterialCommunityIcons
                 name="chevron-left"
                 size={20}
-                color={isSet ? colors.accent : colors.textMuted}
+                color={isSet ? accentColor : colors.textMuted}
               />
             </TouchableOpacity>
           );
@@ -112,14 +144,14 @@ export default function SettingsScreen({ navigation }) {
       <View style={styles.footer}>
         <View style={styles.footerSeparator} />
         <TouchableOpacity
-          style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+          style={[styles.saveBtn, { backgroundColor: accentColor }, saving && { opacity: 0.6 }]}
           onPress={onSave}
           disabled={saving}
         >
           {saving ? (
-            <ActivityIndicator color={colors.accentText} />
+            <ActivityIndicator color={accentTextColor} />
           ) : (
-            <Text style={styles.saveBtnText}>שמירה</Text>
+            <Text style={[styles.saveBtnText, { color: accentTextColor }]}>שמירה</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -143,7 +175,6 @@ export default function SettingsScreen({ navigation }) {
           </Text>
 
           {modalMain === null ? (
-            // Step 1: pick main status
             <ScrollView>
               {statuses.map((s) => (
                 <TouchableOpacity
@@ -160,14 +191,13 @@ export default function SettingsScreen({ navigation }) {
               </TouchableOpacity>
             </ScrollView>
           ) : (
-            // Step 2: pick secondary
             <ScrollView>
               <TouchableOpacity
                 style={styles.modalBack}
                 onPress={() => setModalMain(null)}
               >
-                <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
-                <Text style={styles.modalBackText}>
+                <MaterialCommunityIcons name="arrow-right" size={16} color={accentColor} />
+                <Text style={[styles.modalBackText, { color: accentColor }]}>
                   {statuses.find((s) => s.statusCode === modalMain)?.statusDescription}
                 </Text>
               </TouchableOpacity>
@@ -199,6 +229,41 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: spacing.xl },
 
+  sectionTitle: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'right',
+    marginBottom: spacing.sm,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+
+  // accent color swatches
+  swatchRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'flex-end',
+    marginBottom: spacing.md,
+  },
+  swatch: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swatchSelected: {
+    borderWidth: 3,
+    borderColor: colors.text,
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginBottom: spacing.md,
+  },
+
   dayRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -211,8 +276,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   dayRowActive: {
-    backgroundColor: '#2a2616',
-    borderColor: colors.accent,
+    backgroundColor: colors.surfaceAlt,
   },
   dayName: {
     color: colors.text,
@@ -227,9 +291,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginHorizontal: spacing.sm,
   },
-  dayLabelSet: {
-    color: colors.accent,
-  },
+  dayLabelSet: {},
   dayLabelUnset: {
     color: colors.textMuted,
   },
@@ -245,13 +307,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   saveBtn: {
-    backgroundColor: colors.accent,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     alignItems: 'center',
   },
   saveBtnText: {
-    color: colors.accentText,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -282,7 +342,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginBottom: spacing.sm,
   },
-  modalBackText: { color: colors.accent, fontSize: 14 },
+  modalBackText: { fontSize: 14 },
   modalOption: {
     paddingVertical: spacing.md,
     borderBottomWidth: 1,

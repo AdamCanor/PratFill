@@ -30,6 +30,7 @@ import {
 import { getSecondaryLabel, STATUSES as FALLBACK_STATUSES } from '../data/statuses';
 import { getUpcomingDates, monthsToQuery } from '../utils/dates';
 import { colors, spacing, radius } from '../theme';
+import { useTheme } from '../context/ThemeContext';
 
 I18nManager.forceRTL(true);
 
@@ -49,12 +50,9 @@ function parseDateFromApiDate(apiDate) {
   return new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
 }
 
-// ── preserve existing logic ────────────────────────────────────────────────
-
 function normalizeDate(report) {
   const raw = report?.date;
   if (!raw) return '';
-  // API returns ISO string "2026-06-17T00:00:00" — convert to DD.MM.YYYY
   const d = new Date(raw);
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -69,7 +67,6 @@ function getSecondaryLabelFromList(statuses, mainCode, secondaryCode) {
 
 function describeReport(report) {
   if (report?.secondaryStatusReported) return report.secondaryStatusReported;
-  // fallback for unexpected shapes
   const mainCode = report?.reportedStatusCode?.slice(0, 2) || report?.mainCode || report?.MainCode;
   const secCode = report?.reportedStatusCode?.slice(2, 4) || report?.secondaryCode || report?.SecondaryCode;
   const sec = getSecondaryLabelFromList(FALLBACK_STATUSES, mainCode, secCode);
@@ -85,11 +82,12 @@ const SEGMENT_OPTIONS = [
 // ── TeamUserRow ───────────────────────────────────────────────────────────
 
 function TeamUserRow({ user, onPress }) {
+  const { accentColor } = useTheme();
   const reported = !!user.reportedMainCode;
   const determined = !!user.isDetermined;
   const statusLabel = user.reportedSecondaryName || user.reportedMainName || 'לא מדווח';
   const icon = determined ? 'check-circle' : reported ? 'check-circle-outline' : 'circle-outline';
-  const iconColor = determined ? colors.success : reported ? colors.accent : colors.textMuted;
+  const iconColor = determined ? colors.success : reported ? accentColor : colors.textMuted;
   return (
     <TouchableOpacity style={teamStyles.row} onPress={onPress} activeOpacity={0.7}>
       <View style={teamStyles.rowLeft}>
@@ -97,7 +95,12 @@ function TeamUserRow({ user, onPress }) {
       </View>
       <View style={teamStyles.rowCenter}>
         <Text style={teamStyles.name}>{user.firstName} {user.lastName}</Text>
-        <Text style={[teamStyles.status, determined ? teamStyles.statusDetermined : reported ? teamStyles.statusReported : teamStyles.statusMissing]}>
+        <Text style={[
+          teamStyles.status,
+          determined ? teamStyles.statusDetermined :
+          reported ? { color: accentColor } :
+          teamStyles.statusMissing,
+        ]}>
           {statusLabel}
         </Text>
       </View>
@@ -123,14 +126,16 @@ const teamStyles = StyleSheet.create({
   name: { color: colors.text, fontSize: 15, fontWeight: '600', textAlign: 'right' },
   status: { fontSize: 12, textAlign: 'right', marginTop: 2 },
   statusDetermined: { color: colors.success },
-  statusReported: { color: colors.accent },
   statusMissing: { color: colors.textMuted },
 });
 
 // ── component ─────────────────────────────────────────────────────────────
 
 export default function HomeScreen({ navigation, isCommanderProp = false }) {
-  const [loading, setLoading] = useState(false);
+  const { accentColor, accentTextColor } = useTheme();
+
+  // start loading=true so spinner shows immediately, no flash of empty list
+  const [loading, setLoading] = useState(true);
   const [filling, setFilling] = useState(false);
   const [reports, setReports] = useState([]);
   const [settings, setSettings] = useState(null);
@@ -138,14 +143,12 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
   const [userName, setUserName] = useState(null);
   const [isCommander, setIsCommander] = useState(isCommanderProp);
 
-  // new UI state
   const [activeTab, setActiveTab] = useState('personal');
   const [modalVisible, setModalVisible] = useState(false);
   const [modalDate, setModalDate] = useState(null);
   const [modalMain, setModalMain] = useState(null);
   const [segLoading, setSegLoading] = useState({});
 
-  // team tab state
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamUsers, setTeamUsers] = useState([]);
   const [teamError, setTeamError] = useState(null);
@@ -217,7 +220,6 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
       const upcoming = getUpcomingDates(7);
       const existingDates = new Set(reports.map(normalizeDate));
 
-      // Only fill days that (a) have no report yet and (b) have a default set
       const toCreate = upcoming.filter((d) => {
         if (existingDates.has(d.apiDate)) return false;
         const dayOfWeek = new Date(
@@ -410,60 +412,74 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
     const isLoading = segLoading[item.apiDate];
     const dateObj = parseDateFromApiDate(item.apiDate);
     const isToday = item.apiDate === todayApiDate;
+    const statusText = isFilled ? describeReport(report) : null;
 
     return (
       <View
         style={[
           styles.dayCard,
-          { borderColor: isFilled ? '#1f3320' : isToday ? colors.accent : colors.border },
+          { borderColor: isFilled ? '#1f3320' : isToday ? accentColor : colors.border },
         ]}
       >
-        {/* Left: date + day name */}
-        <View style={styles.dayLeft}>
-          <Text
-            style={[
-              styles.dayDateText,
-              { color: isFilled ? colors.success : isToday ? colors.accent : colors.text },
-            ]}
+        {/* Main row: date + segments + edit */}
+        <View style={styles.dayCardRow}>
+          {/* Left: date + day name */}
+          <View style={styles.dayLeft}>
+            <Text
+              style={[
+                styles.dayDateText,
+                { color: isFilled ? colors.success : isToday ? accentColor : colors.text },
+              ]}
+            >
+              {formatDisplayDate(item.apiDate)}
+            </Text>
+            <Text style={[styles.dayNameText, isToday && { color: accentColor }]}>
+              {getDayName(dateObj)}
+            </Text>
+          </View>
+
+          {/* Center: segmented control */}
+          <View style={styles.segmentRow}>
+            {isLoading ? (
+              <ActivityIndicator color={accentColor} size="small" />
+            ) : (
+              SEGMENT_OPTIONS.map((opt) => {
+                const isActive =
+                  isFilled &&
+                  opt.mainCode !== null &&
+                  existingMain === opt.mainCode &&
+                  existingSec === opt.secondaryCode;
+                return (
+                  <TouchableOpacity
+                    key={opt.label}
+                    style={[
+                      styles.segBtn,
+                      isActive && [styles.segBtnActive, { borderColor: accentColor, backgroundColor: accentColor + '22' }],
+                    ]}
+                    onPress={() => handleSegment(item.apiDate, opt)}
+                  >
+                    <Text style={[styles.segBtnText, isActive && { color: accentColor }]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </View>
+
+          {/* Right: edit icon */}
+          <TouchableOpacity
+            style={styles.editBtn}
+            onPress={() => openModal(item.apiDate)}
           >
-            {formatDisplayDate(item.apiDate)}
-          </Text>
-          <Text style={[styles.dayNameText, isToday && { color: colors.accent }]}>{getDayName(dateObj)}</Text>
+            <MaterialCommunityIcons name="pencil-outline" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
         </View>
 
-        {/* Center: segmented control */}
-        <View style={styles.segmentRow}>
-          {isLoading ? (
-            <ActivityIndicator color={colors.accent} size="small" />
-          ) : (
-            SEGMENT_OPTIONS.map((opt) => {
-              const isActive =
-                isFilled &&
-                opt.mainCode !== null &&
-                existingMain === opt.mainCode &&
-                existingSec === opt.secondaryCode;
-              return (
-                <TouchableOpacity
-                  key={opt.label}
-                  style={[styles.segBtn, isActive && styles.segBtnActive]}
-                  onPress={() => handleSegment(item.apiDate, opt)}
-                >
-                  <Text style={[styles.segBtnText, isActive && styles.segBtnTextActive]}>
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })
-          )}
-        </View>
-
-        {/* Right: edit icon */}
-        <TouchableOpacity
-          style={styles.editBtn}
-          onPress={() => openModal(item.apiDate)}
-        >
-          <MaterialCommunityIcons name="pencil-outline" size={18} color={colors.textMuted} />
-        </TouchableOpacity>
+        {/* Status label — shown when filled so the reported status is explicit */}
+        {statusText && !isLoading ? (
+          <Text style={styles.statusHint}>{statusText}</Text>
+        ) : null}
       </View>
     );
   };
@@ -504,23 +520,21 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
       {/* Tabs */}
       <View style={styles.tabRow}>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'personal' && styles.tabActive]}
+          style={[styles.tab, activeTab === 'personal' && [styles.tabActive, { borderBottomColor: accentColor }]]}
           onPress={() => setActiveTab('personal')}
         >
-          <Text
-            style={[styles.tabText, activeTab === 'personal' && styles.tabTextActive]}
-          >
+          <Text style={[styles.tabText, activeTab === 'personal' && [styles.tabTextActive, { color: accentColor }]]}>
             דיווח אישי עתידי
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'team' && styles.tabActive]}
+          style={[styles.tab, activeTab === 'team' && [styles.tabActive, { borderBottomColor: accentColor }]]}
           onPress={() => {
             setActiveTab('team');
             if (teamUsers.length === 0 && !teamLoading) loadTeam();
           }}
         >
-          <Text style={[styles.tabText, activeTab === 'team' && styles.tabTextActive]}>
+          <Text style={[styles.tabText, activeTab === 'team' && [styles.tabTextActive, { color: accentColor }]]}>
             החיילים שלי
           </Text>
         </TouchableOpacity>
@@ -529,12 +543,12 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
       {activeTab === 'team' ? (
         <View style={{ flex: 1 }}>
           {teamLoading ? (
-            <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.lg }} />
+            <ActivityIndicator color={accentColor} style={{ marginTop: spacing.lg }} />
           ) : teamError ? (
             <View style={styles.teamPlaceholder}>
               <Text style={styles.teamErrorText}>{teamError}</Text>
               <TouchableOpacity style={styles.retryBtn} onPress={loadTeam}>
-                <Text style={styles.retryBtnText}>נסה שוב</Text>
+                <Text style={[styles.retryBtnText, { color: accentColor }]}>נסה שוב</Text>
               </TouchableOpacity>
             </View>
           ) : !isCommander && teamUsers.length === 0 ? (
@@ -563,7 +577,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           {/* Summary row */}
           <View style={styles.summaryRow}>
             <TouchableOpacity onPress={onFillWeek}>
-              <Text style={styles.markAllText}>סמן הכל</Text>
+              <Text style={[styles.markAllText, { color: accentColor }]}>סמן הכל</Text>
             </TouchableOpacity>
             <Text style={styles.summaryText}>
               <Text style={styles.summaryCount}>{filledCount}</Text>
@@ -576,7 +590,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
 
           {/* Day list */}
           {loading ? (
-            <ActivityIndicator color={colors.accent} style={{ marginTop: spacing.lg }} />
+            <ActivityIndicator color={accentColor} style={{ marginTop: spacing.lg }} />
           ) : (
             <FlatList
               data={upcoming}
@@ -591,14 +605,14 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           <View style={styles.bottomSection}>
             <View style={styles.separator} />
             <TouchableOpacity
-              style={[styles.submitBtn, filling && styles.submitBtnDisabled]}
+              style={[styles.submitBtn, { backgroundColor: accentColor }, filling && styles.submitBtnDisabled]}
               onPress={onFillWeek}
               disabled={filling}
             >
               {filling ? (
-                <ActivityIndicator color={colors.accentText} />
+                <ActivityIndicator color={accentTextColor} />
               ) : (
-                <Text style={styles.submitBtnText}>הגש דוח 1 — (עד שעה 11:55)</Text>
+                <Text style={[styles.submitBtnText, { color: accentTextColor }]}>הגש דוח 1 — (עד שעה 11:55)</Text>
               )}
             </TouchableOpacity>
             <Text style={styles.submitMeta}>ימים ריקים יוגשו עם דיווח ברירת המחדל</Text>
@@ -624,7 +638,6 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           </Text>
 
           {modalMain === null ? (
-            // Step 1: pick main status
             <ScrollView>
               {statuses.map((s) => (
                 <TouchableOpacity
@@ -637,14 +650,13 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
               ))}
             </ScrollView>
           ) : (
-            // Step 2: pick secondary
             <ScrollView>
               <TouchableOpacity
                 style={styles.modalBack}
                 onPress={() => setModalMain(null)}
               >
-                <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
-                <Text style={styles.modalBackText}>
+                <MaterialCommunityIcons name="arrow-right" size={16} color={accentColor} />
+                <Text style={[styles.modalBackText, { color: accentColor }]}>
                   {statuses.find((s) => s.statusCode === modalMain)?.statusDescription}
                 </Text>
               </TouchableOpacity>
@@ -670,6 +682,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           </TouchableOpacity>
         </View>
       </Modal>
+
       {/* Team status picker modal */}
       <Modal
         visible={teamModalVisible}
@@ -690,7 +703,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           </Text>
 
           {teamUpdating ? (
-            <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.lg }} />
+            <ActivityIndicator color={accentColor} style={{ marginVertical: spacing.lg }} />
           ) : teamModalMain === null ? (
             <ScrollView>
               {statuses.map((s) => (
@@ -709,8 +722,8 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
                 style={styles.modalBack}
                 onPress={() => setTeamModalMain(null)}
               >
-                <MaterialCommunityIcons name="arrow-right" size={16} color={colors.accent} />
-                <Text style={styles.modalBackText}>
+                <MaterialCommunityIcons name="arrow-right" size={16} color={accentColor} />
+                <Text style={[styles.modalBackText, { color: accentColor }]}>
                   {statuses.find((s) => s.statusCode === teamModalMain)?.statusDescription}
                 </Text>
               </TouchableOpacity>
@@ -768,16 +781,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
-  tabActive: { borderBottomColor: colors.accent },
+  tabActive: { borderBottomColor: colors.border },
   tabText: { color: colors.textMuted, fontSize: 14 },
-  tabTextActive: { color: colors.accent, fontWeight: '600' },
+  tabTextActive: { fontWeight: '600' },
 
   // team placeholder
   teamPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   teamPlaceholderText: { color: colors.textMuted, fontSize: 16 },
   teamErrorText: { color: colors.danger, fontSize: 14, textAlign: 'center', paddingHorizontal: spacing.md },
   retryBtn: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
-  retryBtnText: { color: colors.accent, fontSize: 14 },
+  retryBtnText: { fontSize: 14 },
 
   // summary row
   summaryRow: {
@@ -790,12 +803,10 @@ const styles = StyleSheet.create({
   summaryText: { fontSize: 13 },
   summaryMuted: { color: colors.textMuted },
   summaryCount: { color: colors.text },
-  markAllText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
+  markAllText: { fontSize: 13, fontWeight: '600' },
 
-  // day card
+  // day card — column layout to accommodate status hint
   dayCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -803,6 +814,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
+  },
+  dayCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusHint: {
+    fontSize: 11,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
   },
   dayLeft: { width: 44, marginEnd: spacing.sm },
   dayDateText: { fontSize: 13, fontWeight: '700' },
@@ -825,9 +846,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
     borderColor: colors.border,
   },
-  segBtnActive: { backgroundColor: '#2a2616', borderColor: colors.accent },
+  segBtnActive: { backgroundColor: colors.surfaceAlt },
   segBtnText: { color: colors.textMuted, fontSize: 12 },
-  segBtnTextActive: { color: colors.accent },
 
   // edit icon
   editBtn: { marginStart: spacing.sm, padding: spacing.xs },
@@ -836,14 +856,13 @@ const styles = StyleSheet.create({
   bottomSection: { paddingHorizontal: spacing.md, paddingBottom: spacing.lg },
   separator: { height: 1, backgroundColor: colors.border, marginBottom: spacing.md },
   submitBtn: {
-    backgroundColor: colors.accent,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     alignItems: 'center',
     marginBottom: spacing.xs,
   },
   submitBtnDisabled: { opacity: 0.6 },
-  submitBtnText: { color: colors.accentText, fontSize: 16, fontWeight: '700' },
+  submitBtnText: { fontSize: 16, fontWeight: '700' },
   submitMeta: { color: colors.textMuted, fontSize: 11, textAlign: 'center' },
 
   // modal
@@ -873,7 +892,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginBottom: spacing.sm,
   },
-  modalBackText: { color: colors.accent, fontSize: 14 },
+  modalBackText: { fontSize: 14 },
   modalOption: {
     paddingVertical: spacing.md,
     borderBottomWidth: 1,

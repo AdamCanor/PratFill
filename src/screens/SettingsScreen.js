@@ -22,7 +22,7 @@ const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמיש
 
 const DEFAULT_QUICK_BUTTONS = [
   { label: 'בסיס', mainCode: '01', secondaryCode: '01' },
-  { label: 'חופש', mainCode: '04', secondaryCode: '01' },
+  { label: 'אחרי תורנות / משמרת', mainCode: '02', secondaryCode: '09' },
 ];
 
 function getDayLabel(statuses, defaults, day) {
@@ -445,7 +445,7 @@ export default function SettingsScreen({ navigation }) {
 }
 
 const makeStyles = (accent, accentText) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, backgroundColor: colors.bg, direction: 'rtl' },
   content: { padding: spacing.md, paddingBottom: spacing.xl },
 
   sectionTitle: {

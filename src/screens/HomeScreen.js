@@ -76,7 +76,7 @@ function describeReport(report) {
 
 const DEFAULT_QUICK_BUTTONS = [
   { label: 'בסיס', mainCode: '01', secondaryCode: '01' },
-  { label: 'חופש', mainCode: '04', secondaryCode: '01' },
+  { label: 'אחרי תורנות / משמרת', mainCode: '02', secondaryCode: '09' },
 ];
 
 const MAIN_CODE_ICONS = {
@@ -869,7 +869,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
 }
 
 const makeStyles = (accent, accentText) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, backgroundColor: colors.bg, direction: 'rtl' },
 
   topBar: {
     flexDirection: 'row',

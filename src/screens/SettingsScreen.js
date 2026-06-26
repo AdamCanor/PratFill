@@ -20,6 +20,11 @@ I18nManager.forceRTL(true);
 
 const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
+const DEFAULT_QUICK_BUTTONS = [
+  { label: 'בסיס', mainCode: '01', secondaryCode: '01' },
+  { label: 'חופש', mainCode: '04', secondaryCode: '01' },
+];
+
 function getDayLabel(statuses, defaults, day) {
   const d = defaults[day];
   if (!d) return null;
@@ -36,6 +41,10 @@ export default function SettingsScreen({ navigation }) {
   const { accentColor, accentTextColor, setAccent } = useTheme();
   const styles = React.useMemo(() => makeStyles(accentColor, accentTextColor), [accentColor, accentTextColor]);
 
+  const [quickButtons, setQuickButtons] = useState(DEFAULT_QUICK_BUTTONS);
+  const [quickModalIndex, setQuickModalIndex] = useState(null);
+  const [quickModalMain, setQuickModalMain] = useState(null);
+
   const [presets, setPresets] = useState([]);
   const [selectedPresetId, setSelectedPresetId] = useState(null);
   const [renamingPresetId, setRenamingPresetId] = useState(null);
@@ -50,6 +59,7 @@ export default function SettingsScreen({ navigation }) {
   useEffect(() => {
     (async () => {
       const s = await getSettings();
+      if (s?.quickButtons?.length === 2) setQuickButtons(s.quickButtons);
       if (s?.weeklyPresets) {
         setPresets(s.weeklyPresets);
       } else if (s?.weeklyDefaults) {
@@ -105,9 +115,24 @@ export default function SettingsScreen({ navigation }) {
 
   const onSave = async () => {
     setSaving(true);
-    await saveSettings({ weeklyPresets: presets });
+    await saveSettings({ weeklyPresets: presets, quickButtons });
     setSaving(false);
     navigation.goBack();
+  };
+
+  const openQuickModal = (index) => {
+    setQuickModalIndex(index);
+    setQuickModalMain(null);
+  };
+
+  const handleQuickSelectSecondary = (sec) => {
+    setQuickButtons((prev) => {
+      const updated = [...prev];
+      updated[quickModalIndex] = { label: sec.statusDescription, mainCode: quickModalMain, secondaryCode: sec.statusCode };
+      return updated;
+    });
+    setQuickModalIndex(null);
+    setQuickModalMain(null);
   };
 
   const addPreset = () => {
@@ -169,6 +194,21 @@ export default function SettingsScreen({ navigation }) {
             <Text style={styles.addPresetText}>הוסף תבנית</Text>
           </TouchableOpacity>
 
+          <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>כפתורים מהירים</Text>
+          {quickButtons.map((btn, i) => (
+            <TouchableOpacity
+              key={i}
+              style={styles.quickBtnRow}
+              onPress={() => openQuickModal(i)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.quickBtnChip, { backgroundColor: accentColor + '22', borderColor: accentColor }]}>
+                <Text style={[styles.quickBtnChipText, { color: accentColor }]}>{btn.label}</Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-left" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+          ))}
+
           <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>צבע ראשי</Text>
           <View style={styles.swatchRow}>
             {ACCENT_PRESETS.map((preset, i) => {
@@ -207,6 +247,58 @@ export default function SettingsScreen({ navigation }) {
             )}
           </TouchableOpacity>
         </View>
+
+        {/* Quick button picker modal (list view) */}
+        <Modal
+          visible={quickModalIndex !== null}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setQuickModalIndex(null)}
+        >
+          <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => setQuickModalIndex(null)} />
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>
+              {quickModalIndex !== null ? `כפתור ${quickModalIndex + 1}` : ''}
+            </Text>
+            {quickModalMain === null ? (
+              <ScrollView>
+                {statuses.map((s) => (
+                  <TouchableOpacity
+                    key={s.statusCode}
+                    style={styles.modalOption}
+                    onPress={() => setQuickModalMain(s.statusCode)}
+                  >
+                    <Text style={styles.modalOptionText}>{s.statusDescription}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : (
+              <ScrollView>
+                <TouchableOpacity
+                  style={styles.modalBack}
+                  onPress={() => setQuickModalMain(null)}
+                >
+                  <MaterialCommunityIcons name="arrow-right" size={16} color={accentColor} />
+                  <Text style={styles.modalBackText}>
+                    {statuses.find((s) => s.statusCode === quickModalMain)?.statusDescription}
+                  </Text>
+                </TouchableOpacity>
+                {(statuses.find((s) => s.statusCode === quickModalMain)?.secondaries || []).map((sec) => (
+                  <TouchableOpacity
+                    key={sec.statusCode}
+                    style={styles.modalOption}
+                    onPress={() => handleQuickSelectSecondary(sec)}
+                  >
+                    <Text style={styles.modalOptionText}>{sec.statusDescription}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setQuickModalIndex(null)}>
+              <Text style={styles.modalCancelText}>ביטול</Text>
+            </TouchableOpacity>
+          </View>
+        </Modal>
       </View>
     );
   }
@@ -419,6 +511,27 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+
+  // quick buttons
+  quickBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  quickBtnChip: {
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  quickBtnChipText: { fontSize: 14, fontWeight: '600' },
 
   // accent color swatches
   swatchRow: {

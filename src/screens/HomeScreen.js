@@ -74,10 +74,9 @@ function describeReport(report) {
   return sec ? sec.statusDescription : `${mainCode}/${secCode}`;
 }
 
-const SEGMENT_OPTIONS = [
+const DEFAULT_QUICK_BUTTONS = [
   { label: 'בסיס', mainCode: '01', secondaryCode: '01' },
   { label: 'חופש', mainCode: '04', secondaryCode: '01' },
-  { label: 'אחר', mainCode: null, secondaryCode: null },
 ];
 
 const MAIN_CODE_ICONS = {
@@ -145,6 +144,8 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
   const { accentColor, accentTextColor } = useTheme();
   const styles = React.useMemo(() => makeStyles(accentColor, accentTextColor), [accentColor, accentTextColor]);
 
+  const [quickButtons, setQuickButtons] = useState(DEFAULT_QUICK_BUTTONS);
+
   // loading=true so spinner shows immediately on mount — no flash of empty list
   const [loading, setLoading] = useState(true);
   const [filling, setFilling] = useState(false);
@@ -189,6 +190,8 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
         presets = [{ id: 'default', name: 'ברירת מחדל', weeklyDefaults: s.weeklyDefaults }];
       }
       setWeeklyPresets(presets);
+
+      if (s?.quickButtons?.length === 2) setQuickButtons(s.quickButtons);
 
       const cached = await getCachedStatuses();
       if (cached && cached.length > 0) setStatuses(cached);
@@ -517,7 +520,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           {/* Quick-set buttons */}
           {!isLoading && (
             <View style={styles.segmentRow}>
-              {SEGMENT_OPTIONS.map((opt) => {
+              {[...quickButtons, { label: 'אחר...', mainCode: null, secondaryCode: null }].map((opt) => {
                 const isActive =
                   isFilled &&
                   opt.mainCode !== null &&

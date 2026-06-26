@@ -456,83 +456,89 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
     const isPastDeadline = isToday && new Date().getHours() >= 12;
 
     const iconName = isFilled
-      ? (MAIN_CODE_ICONS[existingMain] || 'calendar-outline')
-      : 'calendar-outline';
-    const iconColor = isFilled ? accentColor : colors.textMuted;
+      ? (MAIN_CODE_ICONS[existingMain] || 'check-circle-outline')
+      : 'circle-outline';
     const statusLabel = isFilled
-      ? (report.reportedMainName || report.secondaryStatusReported || describeReport(report))
-      : null;
+      ? (report.secondaryStatusReported || report.reportedMainName || describeReport(report))
+      : 'טרם מדווח';
 
     return (
       <View
         style={[
           styles.dayCard,
-          { borderColor: isFilled ? '#1f3320' : isToday ? accentColor : colors.border },
-          isPastDeadline && { opacity: 0.7 },
+          isFilled && styles.dayCardFilled,
+          isToday && !isFilled && styles.dayCardToday,
+          isPastDeadline && { opacity: 0.6 },
         ]}
       >
-        {/* Left: icon + date + day name + status */}
-        <View style={styles.dayLeft}>
-          {isToday && (
-            <View style={styles.todayBadge}>
-              <Text style={styles.todayBadgeText}>היום</Text>
+        {/* Filled indicator stripe */}
+        {isFilled && <View style={styles.filledStripe} />}
+
+        <View style={styles.dayCardInner}>
+          {/* Header row: day name + date + badges */}
+          <View style={styles.dayHeader}>
+            <View style={styles.dayHeaderLeft}>
+              {isToday && (
+                <View style={styles.todayBadge}>
+                  <Text style={styles.todayBadgeText}>היום</Text>
+                </View>
+              )}
+              {isPastDeadline && (
+                <MaterialCommunityIcons name="lock-outline" size={13} color={colors.textMuted} />
+              )}
+            </View>
+            <View style={styles.dayHeaderRight}>
+              <Text style={[styles.dayNameText, isToday && { color: accentColor }]}>
+                {getDayName(dateObj)}
+              </Text>
+              <Text style={styles.dayDateText}>{formatDisplayDate(item.apiDate)}</Text>
+            </View>
+          </View>
+
+          {/* Status — hero element */}
+          <View style={styles.statusRow}>
+            {isLoading ? (
+              <ActivityIndicator color={accentColor} size="small" />
+            ) : (
+              <>
+                <MaterialCommunityIcons
+                  name={iconName}
+                  size={18}
+                  color={isFilled ? colors.success : colors.textMuted}
+                  style={{ marginEnd: spacing.xs }}
+                />
+                <Text style={[styles.statusText, isFilled ? styles.statusTextFilled : styles.statusTextEmpty]}>
+                  {statusLabel}
+                </Text>
+              </>
+            )}
+          </View>
+
+          {/* Quick-set buttons */}
+          {!isLoading && (
+            <View style={styles.segmentRow}>
+              {SEGMENT_OPTIONS.map((opt) => {
+                const isActive =
+                  isFilled &&
+                  opt.mainCode !== null &&
+                  existingMain === opt.mainCode &&
+                  existingSec === opt.secondaryCode;
+                return (
+                  <TouchableOpacity
+                    key={opt.label}
+                    style={[styles.segBtn, isActive && styles.segBtnActive]}
+                    onPress={() => handleSegment(item.apiDate, opt)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.segBtnText, isActive && styles.segBtnTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
-          <View style={styles.dayDateRow}>
-            <MaterialCommunityIcons name={iconName} size={16} color={iconColor} style={{ marginEnd: 3 }} />
-            {isPastDeadline && (
-              <MaterialCommunityIcons name="lock-outline" size={14} color={colors.textMuted} style={{ marginEnd: 3 }} />
-            )}
-            <Text
-              style={[
-                styles.dayDateText,
-                { color: isFilled ? colors.success : isToday ? accentColor : colors.text },
-              ]}
-            >
-              {formatDisplayDate(item.apiDate)}
-            </Text>
-          </View>
-          <Text style={[styles.dayNameText, isToday && { color: accentColor }]}>
-            {getDayName(dateObj)}
-          </Text>
-          {statusLabel && !isLoading ? (
-            <Text style={styles.statusLabel} numberOfLines={1}>{statusLabel}</Text>
-          ) : null}
         </View>
-
-        {/* Center: segmented control */}
-        <View style={styles.segmentRow}>
-          {isLoading ? (
-            <ActivityIndicator color={accentColor} size="small" />
-          ) : (
-            SEGMENT_OPTIONS.map((opt) => {
-              const isActive =
-                isFilled &&
-                opt.mainCode !== null &&
-                existingMain === opt.mainCode &&
-                existingSec === opt.secondaryCode;
-              return (
-                <TouchableOpacity
-                  key={opt.label}
-                  style={[styles.segBtn, isActive && styles.segBtnActive]}
-                  onPress={() => handleSegment(item.apiDate, opt)}
-                >
-                  <Text style={[styles.segBtnText, isActive && styles.segBtnTextActive]}>
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })
-          )}
-        </View>
-
-        {/* Right: edit icon */}
-        <TouchableOpacity
-          style={styles.editBtn}
-          onPress={() => openModal(item.apiDate)}
-        >
-          <MaterialCommunityIcons name="pencil-outline" size={18} color={colors.textMuted} />
-        </TouchableOpacity>
       </View>
     );
   };
@@ -629,15 +635,11 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
         <>
           {/* Summary row */}
           <View style={styles.summaryRow}>
-            <TouchableOpacity onPress={onFillWeek}>
-              <Text style={styles.markAllText}>סמן הכל</Text>
-            </TouchableOpacity>
             <Text style={styles.summaryText}>
               <Text style={styles.summaryCount}>{filledCount}</Text>
-              <Text style={styles.summaryMuted}> מוזן</Text>
               <Text style={styles.summaryMuted}> מתוך </Text>
               <Text style={styles.summaryCount}>7</Text>
-              <Text style={styles.summaryMuted}> ימים</Text>
+              <Text style={styles.summaryMuted}> ימים מדווחים</Text>
             </Text>
           </View>
 
@@ -665,10 +667,10 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
               {filling ? (
                 <ActivityIndicator color={accentTextColor} />
               ) : (
-                <Text style={styles.submitBtnText}>הגש דוח 1 — (עד שעה 11:55)</Text>
+                <Text style={styles.submitBtnText}>מלא ימים ריקים לפי תבנית</Text>
               )}
             </TouchableOpacity>
-            <Text style={styles.submitMeta}>ימים ריקים יוגשו עם דיווח ברירת המחדל</Text>
+            <Text style={styles.submitMeta}>מדווח רק על ימים שטרם מולאו</Text>
           </View>
         </>
       )}
@@ -894,54 +896,83 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
   retryBtnText: { color: accent, fontSize: 14 },
 
   summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
   summaryText: { fontSize: 13 },
   summaryMuted: { color: colors.textMuted },
-  summaryCount: { color: colors.text },
-  markAllText: { color: accent, fontSize: 13, fontWeight: '600' },
+  summaryCount: { color: colors.text, fontWeight: '600' },
 
   dayCard: {
     flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     borderWidth: 1,
+    borderColor: colors.border,
     marginHorizontal: spacing.md,
     marginBottom: spacing.sm,
+    overflow: 'hidden',
+  },
+  dayCardFilled: {
+    borderColor: colors.success + '55',
+    backgroundColor: colors.success + '08',
+  },
+  dayCardToday: {
+    borderColor: accent,
+  },
+  filledStripe: {
+    width: 4,
+    backgroundColor: colors.success,
+  },
+  dayCardInner: {
+    flex: 1,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
   },
-  dayLeft: { width: 60, marginEnd: spacing.sm },
-  dayDateRow: { flexDirection: 'row', alignItems: 'center' },
-  dayDateText: { fontSize: 13, fontWeight: '700' },
-  dayNameText: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  statusLabel: { color: accent, fontSize: 10, marginTop: 2 },
+  dayHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  dayHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  dayHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  dayNameText: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  dayDateText: { color: colors.textMuted, fontSize: 13 },
   todayBadge: {
     backgroundColor: accent,
     borderRadius: radius.sm,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    alignSelf: 'flex-start',
-    marginBottom: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
   todayBadgeText: { color: accentText, fontSize: 10, fontWeight: '700' },
 
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    minHeight: 24,
+  },
+  statusText: { fontSize: 14, fontWeight: '600' },
+  statusTextFilled: { color: colors.success },
+  statusTextEmpty: { color: colors.textMuted, fontWeight: '400' },
+
   segmentRow: {
-    flex: 1,
     flexDirection: 'row',
     gap: spacing.xs,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   segBtn: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: radius.sm,
     borderWidth: 1,
     backgroundColor: colors.surfaceAlt,
@@ -949,9 +980,7 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
   },
   segBtnActive: { backgroundColor: accent + '22', borderColor: accent },
   segBtnText: { color: colors.textMuted, fontSize: 12 },
-  segBtnTextActive: { color: accent },
-
-  editBtn: { marginStart: spacing.sm, padding: spacing.xs },
+  segBtnTextActive: { color: accent, fontWeight: '600' },
 
   bottomSection: { paddingHorizontal: spacing.md, paddingBottom: spacing.lg },
   separator: { height: 1, backgroundColor: colors.border, marginBottom: spacing.md },

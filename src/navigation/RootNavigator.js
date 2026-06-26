@@ -64,7 +64,7 @@ export default function RootNavigator() {
         />
         <Stack.Screen
           name="Home"
-          options={{ title: 'דוח 67', headerShown: false }}
+          options={{ title: 'דוח 10', headerShown: false }}
         >
           {(props) => <HomeScreen {...props} isCommanderProp={isCommander} />}
         </Stack.Screen>

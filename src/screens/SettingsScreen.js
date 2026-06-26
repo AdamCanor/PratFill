@@ -445,7 +445,7 @@ export default function SettingsScreen({ navigation }) {
 }
 
 const makeStyles = (accent, accentText) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1, backgroundColor: colors.bg, direction: 'rtl' },
   content: { padding: spacing.md, paddingBottom: spacing.xl },
 
   sectionTitle: {

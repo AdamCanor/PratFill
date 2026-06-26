@@ -704,7 +704,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
               ))}
             </ScrollView>
           ) : (
-            <ScrollView keyboardShouldPersistTaps="handled">
+            <>
               <TouchableOpacity
                 style={styles.modalBack}
                 onPress={() => { setModalMain(null); setModalSelectedSecondary(null); }}
@@ -714,26 +714,33 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
                   {statuses.find((s) => s.statusCode === modalMain)?.statusDescription}
                 </Text>
               </TouchableOpacity>
-              {(statuses.find((s) => s.statusCode === modalMain)?.secondaries || []).map((sec) => {
-                const isSelected = modalSelectedSecondary === sec.statusCode;
-                return (
-                  <TouchableOpacity
-                    key={sec.statusCode}
-                    style={[styles.modalOption, isSelected && styles.modalOptionSelected]}
-                    onPress={() => setModalSelectedSecondary(sec.statusCode)}
-                  >
-                    <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextSelected]}>
-                      {sec.statusDescription}
-                    </Text>
-                    {isSelected && (
-                      <MaterialCommunityIcons name="check" size={16} color={accentColor} />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
+              <ScrollView
+                style={styles.modalSecondaryList}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator
+              >
+                {(statuses.find((s) => s.statusCode === modalMain)?.secondaries || []).map((sec) => {
+                  const isSelected = modalSelectedSecondary === sec.statusCode;
+                  return (
+                    <TouchableOpacity
+                      key={sec.statusCode}
+                      style={[styles.modalOption, isSelected && styles.modalOptionSelected]}
+                      onPress={() => setModalSelectedSecondary(sec.statusCode)}
+                    >
+                      <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextSelected]}>
+                        {sec.statusDescription}
+                      </Text>
+                      {isSelected && (
+                        <MaterialCommunityIcons name="check" size={16} color={accentColor} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              <Text style={styles.noteLabel}>הערה (אופציונלי)</Text>
               <TextInput
                 style={styles.noteInput}
-                placeholder="הערה (אופציונלי)"
+                placeholder="לדוגמה: חזרתי מוקדם"
                 placeholderTextColor={colors.textMuted}
                 value={modalNote}
                 onChangeText={setModalNote}
@@ -747,7 +754,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
               >
                 <Text style={styles.confirmBtnText}>אשר</Text>
               </TouchableOpacity>
-            </ScrollView>
+            </>
           )}
 
           <TouchableOpacity style={styles.modalCancel} onPress={closeModal}>
@@ -975,14 +982,17 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
   segBtn: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 6,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
     borderRadius: radius.sm,
     borderWidth: 1,
     backgroundColor: colors.surfaceAlt,
     borderColor: colors.border,
   },
   segBtnActive: { backgroundColor: accent + '22', borderColor: accent },
-  segBtnText: { color: colors.textMuted, fontSize: 12 },
+  segBtnText: { color: colors.textMuted, fontSize: 11, textAlign: 'center' },
   segBtnTextActive: { color: accent, fontWeight: '600' },
 
   bottomSection: { paddingHorizontal: spacing.md, paddingBottom: spacing.lg },
@@ -1042,6 +1052,19 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
   modalCancel: { marginTop: spacing.md, alignItems: 'center' },
   modalCancelText: { color: colors.danger, fontSize: 15 },
 
+  modalSecondaryList: {
+    maxHeight: 200,
+    marginBottom: spacing.sm,
+  },
+  noteLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'right',
+    marginBottom: spacing.xs,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
   noteInput: {
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.md,

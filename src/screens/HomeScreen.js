@@ -869,7 +869,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
 }
 
 const makeStyles = (accent, accentText) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg, direction: 'rtl' },
+  container: { flex: 1, backgroundColor: colors.bg },
 
   topBar: {
     flexDirection: 'row',

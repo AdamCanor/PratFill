@@ -410,12 +410,8 @@ export default function SettingsScreen({ navigation }) {
         animationType="slide"
         onRequestClose={() => setModalVisible(false)}
       >
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-          <TouchableOpacity
-            style={styles.backdrop}
-            activeOpacity={1}
-            onPress={() => setModalVisible(false)}
-          />
+        <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => setModalVisible(false)} />
+        <KeyboardAvoidingView behavior="padding">
           <View style={styles.modalSheet}>
           <Text style={styles.modalTitle}>
             {modalDay !== null
@@ -500,7 +496,7 @@ export default function SettingsScreen({ navigation }) {
           >
             <Text style={styles.modalCancelText}>ביטול</Text>
           </TouchableOpacity>
-          </View>
+        </View>
         </KeyboardAvoidingView>
       </Modal>
     </View>

@@ -724,6 +724,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
                 style={styles.modalSecondaryList}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator
+                persistentScrollbar
               >
                 {(statuses.find((s) => s.statusCode === modalMain)?.secondaries || []).map((sec) => {
                   const isSelected = modalSelectedSecondary === sec.statusCode;

@@ -445,14 +445,13 @@ export default function SettingsScreen({ navigation }) {
 }
 
 const makeStyles = (accent, accentText) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg, direction: 'rtl' },
+  container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: spacing.xl },
 
   sectionTitle: {
     color: colors.textMuted,
     fontSize: 11,
     fontWeight: '600',
-    textAlign: 'right',
     marginBottom: spacing.sm,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
@@ -480,12 +479,10 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     fontWeight: '600',
-    textAlign: 'right',
   },
   presetMeta: {
     color: colors.textMuted,
     fontSize: 12,
-    textAlign: 'right',
     marginTop: 2,
   },
   presetDeleteBtn: {
@@ -578,7 +575,6 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '700',
-    textAlign: 'right',
   },
   renameRow: { flex: 1 },
   renameInput: {
@@ -615,12 +611,10 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
     fontWeight: '700',
     fontSize: 15,
     minWidth: 52,
-    textAlign: 'right',
   },
   dayLabel: {
     flex: 1,
     fontSize: 14,
-    textAlign: 'right',
     marginHorizontal: spacing.sm,
   },
   dayLabelSet: {
@@ -684,7 +678,7 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  modalOptionText: { color: colors.text, fontSize: 15, textAlign: 'right' },
+  modalOptionText: { color: colors.text, fontSize: 15 },
   modalClearOption: {
     flexDirection: 'row',
     alignItems: 'center',

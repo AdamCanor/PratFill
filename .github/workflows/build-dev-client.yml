@@ -52,14 +52,14 @@ jobs:
           key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: gradle-${{ hashFiles('android/**/*.gradle*') }}-
 
-      - name: Build release APK
+      - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Find APK
         run: |
           echo "=== android/app/build/outputs ==="
-          find android/app/build/outputs -name "*.apk" 2>/dev/null || echo "outputs dir empty or missing"
+          find android/app/build/outputs/apk/debug -name "*.apk" 2>/dev/null || echo "outputs dir empty or missing"
           echo "=== android/app/build ==="
           ls android/app/build/ 2>/dev/null || echo "build dir missing"
 
@@ -67,4 +67,4 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: pratfill-dev-client
-          path: android/app/build/outputs/apk/release/*.apk
+          path: android/app/build/outputs/apk/debug/*.apk

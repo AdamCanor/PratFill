@@ -17,6 +17,7 @@ import { STATUSES as FALLBACK_STATUSES } from '../data/statuses';
 import { getSettings, saveSettings, getCachedStatuses } from '../api/doch1';
 import { colors, spacing, radius } from '../theme';
 import { useTheme, ACCENT_PRESETS } from '../context/ThemeContext';
+import { runAutoSubmit } from '../tasks/autoSubmitTask';
 
 I18nManager.forceRTL(true);
 
@@ -46,6 +47,8 @@ export default function SettingsScreen({ navigation }) {
   const [commanderMode, setCommanderMode] = useState(false);
   const [autoSubmit, setAutoSubmit] = useState({ enabled: false, presetId: '', time: '09:00' });
   const [autoPresetModalVisible, setAutoPresetModalVisible] = useState(false);
+  const [testingAutoSubmit, setTestingAutoSubmit] = useState(false);
+  const [testResult, setTestResult] = useState(null);
 
   const [quickButtons, setQuickButtons] = useState(DEFAULT_QUICK_BUTTONS);
   const [quickModalIndex, setQuickModalIndex] = useState(null);
@@ -276,6 +279,33 @@ export default function SettingsScreen({ navigation }) {
                   maxLength={5}
                 />
               </View>
+              <TouchableOpacity
+                style={[styles.testAutoBtn, testingAutoSubmit && { opacity: 0.6 }]}
+                disabled={testingAutoSubmit}
+                onPress={async () => {
+                  setTestingAutoSubmit(true);
+                  setTestResult(null);
+                  try {
+                    const result = await runAutoSubmit({ skipTimeCheck: true });
+                    if (result.skipped) setTestResult(`דולג: ${result.reason}`);
+                    else if (result.count === 0) setTestResult('אין ימים חדשים למילוי');
+                    else setTestResult(`✓ נשלח ל-${result.count} ימים — בדוק את ההתראות`);
+                  } catch (e) {
+                    setTestResult(`שגיאה: ${e.message}`);
+                  } finally {
+                    setTestingAutoSubmit(false);
+                  }
+                }}
+              >
+                {testingAutoSubmit ? (
+                  <ActivityIndicator size="small" color={accentTextColor} />
+                ) : (
+                  <Text style={styles.testAutoBtnText}>בדיקת דיווח אוטומטי עכשיו</Text>
+                )}
+              </TouchableOpacity>
+              {testResult ? (
+                <Text style={styles.testResultText}>{testResult}</Text>
+              ) : null}
             </>
           )}
 
@@ -701,6 +731,27 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 2,
+  },
+
+  testAutoBtn: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  testAutoBtnText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  testResultText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: spacing.xs,
   },
 
   timeInput: {

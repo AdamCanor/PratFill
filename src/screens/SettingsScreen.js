@@ -55,8 +55,6 @@ export default function SettingsScreen({ navigation }) {
 
   const [modalDay, setModalDay] = useState(null);
   const [modalMain, setModalMain] = useState(null);
-  const [modalSelectedSecondary, setModalSelectedSecondary] = useState(null);
-  const [modalNote, setModalNote] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statuses, setStatuses] = useState(FALLBACK_STATUSES);
@@ -92,8 +90,6 @@ export default function SettingsScreen({ navigation }) {
   const openModal = (day) => {
     setModalDay(day);
     setModalMain(null);
-    setModalSelectedSecondary(null);
-    setModalNote('');
     setModalVisible(true);
   };
 
@@ -102,16 +98,13 @@ export default function SettingsScreen({ navigation }) {
   };
 
   const handleSelectSecondary = (secondaryCode) => {
-    const note = modalNote.trim();
     updateSelectedPresetDefaults((prev) => ({
       ...prev,
-      [modalDay]: { mainCode: modalMain, secondaryCode, ...(note ? { note } : {}) },
+      [modalDay]: { mainCode: modalMain, secondaryCode },
     }));
     setModalVisible(false);
     setModalDay(null);
     setModalMain(null);
-    setModalSelectedSecondary(null);
-    setModalNote('');
   };
 
   const handleClear = () => {
@@ -122,8 +115,6 @@ export default function SettingsScreen({ navigation }) {
     setModalVisible(false);
     setModalDay(null);
     setModalMain(null);
-    setModalSelectedSecondary(null);
-    setModalNote('');
   };
 
   const onSave = async () => {
@@ -421,7 +412,7 @@ export default function SettingsScreen({ navigation }) {
           </Text>
 
           {modalMain === null ? (
-            <ScrollView showsVerticalScrollIndicator persistentScrollbar>
+            <ScrollView>
               {statuses.map((s) => (
                 <TouchableOpacity
                   key={s.statusCode}
@@ -437,58 +428,26 @@ export default function SettingsScreen({ navigation }) {
               </TouchableOpacity>
             </ScrollView>
           ) : (
-            <>
+            <ScrollView>
               <TouchableOpacity
                 style={styles.modalBack}
-                onPress={() => { setModalMain(null); setModalNote(''); }}
+                onPress={() => setModalMain(null)}
               >
                 <MaterialCommunityIcons name="arrow-right" size={16} color={accentColor} />
                 <Text style={styles.modalBackText}>
                   {statuses.find((s) => s.statusCode === modalMain)?.statusDescription}
                 </Text>
               </TouchableOpacity>
-              <ScrollView
-                style={styles.modalSecondaryList}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator
-                persistentScrollbar
-              >
-                {(statuses.find((s) => s.statusCode === modalMain)?.secondaries || []).map((sec) => {
-                  const isSelected = modalSelectedSecondary === sec.statusCode;
-                  return (
-                    <TouchableOpacity
-                      key={sec.statusCode}
-                      style={[styles.modalOption, isSelected && styles.modalOptionSelected]}
-                      onPress={() => setModalSelectedSecondary(sec.statusCode)}
-                    >
-                      <Text style={[styles.modalOptionText, isSelected && styles.modalOptionTextSelected]}>
-                        {sec.statusDescription}
-                      </Text>
-                      {isSelected && (
-                        <MaterialCommunityIcons name="check" size={16} color={accentColor} />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-              <Text style={styles.noteLabel}>הערה (אופציונלי)</Text>
-              <TextInput
-                style={styles.noteInput}
-                placeholder="לדוגמה: חזרתי מוקדם"
-                placeholderTextColor={colors.textMuted}
-                value={modalNote}
-                onChangeText={setModalNote}
-                textAlign="right"
-                multiline
-              />
-              <TouchableOpacity
-                style={[styles.confirmBtn, !modalSelectedSecondary && styles.confirmBtnDisabled]}
-                onPress={() => modalSelectedSecondary && handleSelectSecondary(modalSelectedSecondary)}
-                disabled={!modalSelectedSecondary}
-              >
-                <Text style={styles.confirmBtnText}>אשר</Text>
-              </TouchableOpacity>
-            </>
+              {(statuses.find((s) => s.statusCode === modalMain)?.secondaries || []).map((sec) => (
+                <TouchableOpacity
+                  key={sec.statusCode}
+                  style={styles.modalOption}
+                  onPress={() => handleSelectSecondary(sec.statusCode)}
+                >
+                  <Text style={styles.modalOptionText}>{sec.statusDescription}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           )}
 
           <TouchableOpacity
@@ -757,56 +716,11 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
   },
   modalBackText: { color: accent, fontSize: 14 },
   modalOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  modalOptionSelected: {
-    borderColor: accent,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    marginBottom: 2,
-  },
   modalOptionText: { color: colors.text, fontSize: 15 },
-  modalOptionTextSelected: { color: accent, fontWeight: '600' },
-  modalSecondaryList: {
-    maxHeight: 200,
-    marginBottom: spacing.sm,
-  },
-  noteLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-    marginBottom: spacing.xs,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  noteInput: {
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    color: colors.text,
-    fontSize: 14,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginTop: spacing.md,
-    minHeight: 60,
-    textAlignVertical: 'top',
-  },
-  confirmBtn: {
-    backgroundColor: accent,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    marginTop: spacing.md,
-  },
-  confirmBtnDisabled: { opacity: 0.4 },
-  confirmBtnText: { color: accentText, fontSize: 16, fontWeight: '700' },
   modalClearOption: {
     flexDirection: 'row',
     alignItems: 'center',

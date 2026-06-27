@@ -276,8 +276,8 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           parseInt(d.apiDate.split('.')[1]) - 1,
           parseInt(d.apiDate.split('.')[0])
         ).getDay();
-        const { mainCode, secondaryCode, note } = weeklyDefaults[dayOfWeek];
-        await insertFutureReport({ mainCode, secondaryCode, note, date: d.apiDate });
+        const { mainCode, secondaryCode } = weeklyDefaults[dayOfWeek];
+        await insertFutureReport({ mainCode, secondaryCode, date: d.apiDate });
       }
 
       Alert.alert('בוצע', `נוספו דיווחים ל-${toCreate.length} ימים`);

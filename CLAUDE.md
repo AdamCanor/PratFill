@@ -76,10 +76,10 @@ git commit -m "Update android/ after adding <package>"
 Pure JS changes do not require a prebuild.
 
 ## CI & branch workflow
-- **Development branch:** `dev` — push here; CI builds a release APK as a workflow artifact.
-- **Release:** merge `dev` → `main` via PR; CI publishes a GitHub Release tagged `v{version}-{sha}`.
+- **Development branch:** `dev` — no CI runs on `dev` pushes.
+- **Release:** merge `dev` → `main` via PR — `release.yml` triggers on `main` push and publishes a GitHub Release tagged `v{version}-{sha}`.
+- `build-apk.yml` also triggers on `main` push and on PRs into `main`; it uploads the APK as a workflow artifact and optionally pushes an OTA update via EAS (only if `EXPO_TOKEN` secret is set).
 - Merge PRs via `mcp__github__merge_pull_request` (owner: `AdamCanor`, repo: `PratFill`).
-- CI workflows: `build-apk.yml` (dev push / PR to main) and `release.yml` (main push). Both use the debug keystore.
 
 ## Cookie library
 Uses `@preeternal/react-native-cookie-manager` (drop-in for deprecated `@react-native-cookies/cookies`). Same API: `CookieManager.get(domain)`, `CookieManager.clearAll()`.

@@ -1,6 +1,3 @@
-import * as TaskManager from 'expo-task-manager';
-import * as BackgroundFetch from 'expo-background-fetch';
-import * as Notifications from 'expo-notifications';
 import { AuthError } from '../api/doch1';
 import { runAutoSubmit } from './runAutoSubmit';
 
@@ -8,6 +5,10 @@ export const TASK_NAME = 'auto-submit-reports';
 export { runAutoSubmit };
 
 try {
+  const TaskManager = require('expo-task-manager');
+  const BackgroundFetch = require('expo-background-fetch');
+  const Notifications = require('expo-notifications');
+
   TaskManager.defineTask(TASK_NAME, async () => {
     try {
       const result = await runAutoSubmit();
@@ -28,11 +29,14 @@ try {
     }
   });
 } catch (_) {
-  // Native module unavailable (Expo Go)
+  // Native modules unavailable (Expo Go)
 }
 
 export async function registerAutoSubmitTask() {
   try {
+    const TaskManager = require('expo-task-manager');
+    const BackgroundFetch = require('expo-background-fetch');
+
     const status = await BackgroundFetch.getStatusAsync();
     if (
       status === BackgroundFetch.BackgroundFetchStatus.Restricted ||
@@ -49,6 +53,6 @@ export async function registerAutoSubmitTask() {
       });
     }
   } catch (_) {
-    // Native module unavailable (Expo Go)
+    // Native modules unavailable (Expo Go)
   }
 }

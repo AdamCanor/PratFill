@@ -410,13 +410,13 @@ export default function SettingsScreen({ navigation }) {
         animationType="slide"
         onRequestClose={() => setModalVisible(false)}
       >
-        <TouchableOpacity
-          style={styles.backdrop}
-          activeOpacity={1}
-          onPress={() => setModalVisible(false)}
-        />
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View style={styles.modalSheet}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <TouchableOpacity
+            style={styles.backdrop}
+            activeOpacity={1}
+            onPress={() => setModalVisible(false)}
+          />
+          <View style={styles.modalSheet}>
           <Text style={styles.modalTitle}>
             {modalDay !== null
               ? `ברירת מחדל — ${DAY_NAMES[modalDay]}`
@@ -477,6 +477,8 @@ export default function SettingsScreen({ navigation }) {
               <Text style={styles.noteLabel}>הערה (אופציונלי)</Text>
               <TextInput
                 style={styles.noteInput}
+                placeholder="הזן הערה לדיווח הנוכחות"
+                placeholderTextColor={colors.textMuted}
                 value={modalNote}
                 onChangeText={setModalNote}
                 textAlign="right"
@@ -498,7 +500,7 @@ export default function SettingsScreen({ navigation }) {
           >
             <Text style={styles.modalCancelText}>ביטול</Text>
           </TouchableOpacity>
-        </View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     </View>

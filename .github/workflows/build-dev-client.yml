@@ -54,6 +54,9 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon -Pandroid.injected.build.abi=arm64-v8a
 
+      - name: Find APK
+        run: find android/app/build/outputs -name "*.apk" 2>/dev/null || echo "No APKs found"
+
       - name: Upload dev client APK
         uses: actions/upload-artifact@v5
         with:

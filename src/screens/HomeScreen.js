@@ -131,8 +131,8 @@ const teamStyles = StyleSheet.create({
   },
   rowLeft: { marginEnd: spacing.sm },
   rowCenter: { flex: 1 },
-  name: { color: colors.text, fontSize: 15, fontWeight: '600', textAlign: 'right' },
-  status: { fontSize: 12, textAlign: 'right', marginTop: 2 },
+  name: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  status: { fontSize: 12, marginTop: 2 },
   statusDetermined: { color: colors.success },
   statusMissing: { color: colors.textMuted },
 });
@@ -1060,7 +1060,6 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
     color: colors.textMuted,
     fontSize: 11,
     fontWeight: '600',
-    textAlign: 'right',
     marginBottom: spacing.xs,
     letterSpacing: 0.5,
     textTransform: 'uppercase',

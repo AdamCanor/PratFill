@@ -1,14 +1,11 @@
-name: Release
+name: Build Android APK (release)
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch: {}
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -44,20 +41,9 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease --parallel -PreactNativeArchitectures=armeabi-v7a,arm64-v8a
 
-      - name: Get release tag
-        id: tag
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          SHA=$(git rev-parse --short HEAD)
-          echo "tag=v${VERSION}-${SHA}" >> $GITHUB_OUTPUT
-          echo "title=v${VERSION}" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          APKS=$(find android/app/build/outputs/apk/release -name "*.apk" | tr '\n' ' ')
-          if [ -z "$APKS" ]; then echo "No APKs found!" && exit 1; fi
-          gh release create "${{ steps.tag.outputs.tag }}" $APKS \
-            --title "${{ steps.tag.outputs.title }}" \
-            --generate-notes
+      - name: Upload APK
+        uses: actions/upload-artifact@v5
+        with:
+          name: pratfill-apk
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error

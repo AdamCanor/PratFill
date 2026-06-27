@@ -1,8 +1,15 @@
 {
   "expo": {
-    "name": "דוח 67",
+    "name": "דוח 10",
     "slug": "pratfill",
     "version": "1.0.0",
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/90d63a31-d3d8-4a51-818a-10ad3e62b272",
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      }
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -26,6 +33,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "90d63a31-d3d8-4a51-818a-10ad3e62b272"
+      }
     }
   }
 }

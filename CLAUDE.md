@@ -1,36 +1,71 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 @AGENTS.md
 
-# PratFill — Claude working notes
-
 ## Project summary
-React Native / Expo app (SDK 56) for IDF soldiers to submit future attendance reports ("דו״ח 1") via the One.Prat API.
+React Native / Expo app (SDK 56) for IDF soldiers to submit future attendance reports ("דוח 10") via the One.Prat API (`https://one.prat.idf.il`).
 
-## File map
+## Commands
 
-| Path | Purpose |
+```bash
+npx expo start --lan   # Dev server for local phone testing (LAN mode)
+npm run android        # Build and run on Android emulator
+```
+
+No test or lint scripts are configured.
+
+## Architecture
+
+**Entry:** `index.js` → `App.js` (wraps everything in `ThemeProvider`) → `RootNavigator.js`
+
+**Auth gate in `RootNavigator.js`:** checks for `AppCookie` via `hasAppCookie()` on mount; routes to `LoginScreen` or `HomeScreen`.
+
+**Login flow (`LoginScreen.js`):** Opens a WebView to the IDF portal. Monitors navigation URLs for path fragments (`/hp`, `/secondaries`, `/calendar`, `/primaries`) then calls `CookieManager.get()` to confirm `AppCookie` is set. On success, navigates to `HomeScreen`.
+
+**HomeScreen.js** (~1100 lines) has two tabs:
+- *Personal* — shows upcoming 7 days, lets soldier report/delete attendance, supports batch "fill week by preset"
+- *Team* (commander-only) — lists soldiers in group, allows updating their status via modal
+
+**SettingsScreen.js** (~600 lines) manages:
+- Weekly presets: per-day-of-week default status templates
+- Quick buttons: 2 configurable one-tap fill buttons shown on HomeScreen
+- Commander mode toggle (shows/hides Team tab)
+- Accent color selection (6 presets, stored in ThemeContext)
+
+**State / persistence:**
+- `ThemeContext` (`src/context/ThemeContext.js`) holds accent color, persists to AsyncStorage key `doch1_accent_color`
+- Settings persist to AsyncStorage key `doch1_settings` (weeklyPresets, quickButtons, commanderMode)
+- Status list cached to `doch1_statuses` (refreshed on login)
+
+## API (`src/api/doch1.js`)
+
+All calls go to `https://one.prat.idf.il`. Auth is entirely cookie-based — `AppCookie` must be present. `getStoredCookieHeader()` builds the `Cookie:` header from `CookieManager`. Any 401/403 or missing cookie throws a custom `AuthError`; screens catch this and navigate back to Login.
+
+Key endpoints:
+| Function | Method + Path |
 |---|---|
-| `src/api/doch1.js` | All API calls + cookie auth. |
-| `src/data/statuses.js` | Static list of report codes. |
-| `src/utils/dates.js` | Date helpers (`getUpcomingDates`, `toApiDate`, etc.). |
-| `src/theme.js` | All colors, spacing, radius tokens. Use these — no hardcoded hex values in components. |
-| `src/screens/HomeScreen.js` | Main screen. |
-| `src/screens/LoginScreen.js` | WebView login flow — sets AppCookie. |
-| `src/screens/SettingsScreen.js` | User preferences (default report codes). |
-| `src/screens/TestConnectionScreen.js` | Debug screen for testing API connectivity. |
-| `src/navigation/RootNavigator.js` | Stack navigator, auth gate. |
-| `android/` | Committed native project — see Native section below. |
+| `getUser()` | GET `/api/account/getUser` — `{isUserAuth, isCommanderAuth}` |
+| `getFutureReports(month, year)` | POST `/api/Attendance/getFutureReport` |
+| `insertFutureReport(...)` | POST `/api/Attendance/InsertFutureReport` (multipart/form-data) |
+| `deleteFutureReport(...)` | POST `/api/Attendance/deleteFutureReport` |
+| `getAllStatuses()` | GET `/api/Attendance/GetAllFilterStatuses` |
+| `loginCommander()` | POST `/api/account/loginCommander` — must call before GetGroups |
+| `getGroups(groupCode)` | GET `/api/attendance/GetGroups?groupcode=` |
+| `updateAndSendPrat(...)` | POST `/api/Attendance/updateAndSendPrat` |
+
+`reportedStatusCode` from the API is 4 chars: first 2 = mainCode, last 2 = secondaryCode (e.g. `"0101"`). `date` fields are ISO strings without timezone — treat as local. `normalizeDate()` in HomeScreen converts them to `DD.MM.YYYY` for matching.
 
 ## UI conventions
-- Dark theme. Accent: `colors.accent` (`#E8C547`).
-- Hebrew-first, RTL. Use `I18nManager.forceRTL(true)` in screens.
-- All style values from `src/theme.js` (`colors`, `spacing`, `radius`).
-- Icons: `@expo/vector-icons` (`MaterialCommunityIcons`) — already installed, no new deps needed.
+- Dark theme. All colors/spacing/radius from `src/theme.js` — no hardcoded hex values in components. Accent is `colors.accent` (default `#E8C547`, user-configurable).
+- Hebrew-first, RTL. Call `I18nManager.forceRTL(true)` in new screens.
+- Icons: `MaterialCommunityIcons` from `@expo/vector-icons` — already installed.
+- Status selection is two-stage (primary → secondary), modal-driven. Reuse this pattern for any new status picker.
+- `src/data/statuses.js` contains hardcoded fallback statuses used when the API is unavailable.
 
-## Native project (android/)
-`android/` is committed to the repo so CI skips `expo prebuild`.
-
-**Re-run prebuild locally and commit the result when you:**
-- Add or remove a package that has native Android code (anything with an `android/` folder in `node_modules/<pkg>/`)
+## Native project (`android/`)
+`android/` is committed so CI skips `expo prebuild`. Only re-run prebuild when adding/removing packages that have native Android code:
 
 ```bash
 npx expo prebuild -p android
@@ -38,53 +73,19 @@ git add android/
 git commit -m "Update android/ after adding <package>"
 ```
 
-Pure JS package changes (no native code) do not require a prebuild.
+Pure JS changes do not require a prebuild.
 
-## API response shapes (confirmed)
-
-### `getFutureReports(month, year)`
-```json
-{
-  "days": [
-    {
-      "date": "2026-06-17T00:00:00",
-      "reportedStatusCode": "0101",
-      "reportedMainName": "נמצא/ת ביחידה",
-      "secondaryStatusReported": "נוכח/ת",
-      "icon": "img/basis.png",
-      "showStatusMsg": false
-    }
-  ],
-  "minDate": "2026-06-17T00:00:00+03:00",
-  "maxDate": "2026-07-17T00:00:00+03:00",
-  "isWeekendNachsalReportActive": true
-}
-```
-- `reportedStatusCode` is 4 chars: first 2 = mainCode, last 2 = secondaryCode (e.g. `"0101"`)
-- `date` is ISO string without timezone — treat as local date
-- `normalizeDate()` in HomeScreen converts `date` → `DD.MM.YYYY` for matching
-
-### `getReportedData()` — GET /api/Attendance/GetReportedData
-Returns current user info: `{ firstName, lastName, commander: bool, reported: bool, mainStatusReported, secondaryStatusReported, ... }`
-
-### `loginCommander()` — POST /api/account/loginCommander
-Must be called before GetGroups. Returns `{ isUserAuth, isCommanderAuth, error }`.
-
-### `getGroups(groupCode)` — GET /api/attendance/GetGroups?groupcode=
-Returns `{ firstGroup: { users: [...] }, ... }`. Each user: `{ mi, firstName, lastName, reportedMainCode, reportedMainName, reportedSecondaryCode, reportedSecondaryName, createdToday, isFutureReport, groupCode }`.
+## Development workflow
+- **Local testing:** `npx expo start --lan` — connects a physical phone on the same network via Expo Go.
+- **Claude's working branch:** `claude/main` — all Claude Code changes go here. Never commit directly to `dev` or `main`.
+- **Merging:** when work is ready, merge `claude/main` → `dev` via PR, then `dev` → `main` for a release.
+- **No CI on `dev`** — `dev` pushes trigger nothing.
+- **Release:** merge `dev` → `main` via PR. On `main` push, `release.yml` builds a production APK and publishes a GitHub Release tagged `v{version}-{sha}`.
+- **GitHub Actions workflows (all in `.github/workflows/`):**
+  - `release.yml` — auto on `main` push; builds release APK, creates GitHub Release
+  - `build-apk.yml` — manual dispatch only; builds release APK, uploads as artifact (useful for testing release builds without merging to main)
+  - `build-dev-client.yml` — manual dispatch only; builds debug APK, uploads as artifact
+- Merge PRs via `mcp__github__merge_pull_request` (owner: `AdamCanor`, repo: `PratFill`).
 
 ## Cookie library
-Uses `@preeternal/react-native-cookie-manager` — a drop-in replacement for the deprecated `@react-native-cookies/cookies`. Same API (`CookieManager.get(domain)`, `CookieManager.clearAll()`). No patch needed.
-
-## CI (GitHub Actions)
-Two workflows:
-- `build-apk.yml` — triggers on `dev` push and PRs into `main`. Builds a **release APK** (standalone, no Metro needed). Artifact: `android/app/build/outputs/apk/release/app-release.apk`
-- `release.yml` — triggers on `main` push. Builds release APK and publishes a **GitHub Release** tagged `v{version}-{sha}`.
-
-Both skip `expo prebuild` (android/ is committed) and use the debug keystore (sufficient for sideloading).
-
-## Branch & PR workflow
-- Development branch: `dev`
-- Push commits to `dev` — CI builds APK as artifact.
-- When ready to release: open PR `dev` → `main`, merge it — CI publishes a GitHub Release automatically.
-- Merge via GitHub MCP (`mcp__github__merge_pull_request`, owner: `AdamCanor`, repo: `PratFill`).
+Uses `@preeternal/react-native-cookie-manager` (drop-in for deprecated `@react-native-cookies/cookies`). Same API: `CookieManager.get(domain)`, `CookieManager.clearAll()`.

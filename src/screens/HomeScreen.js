@@ -693,8 +693,8 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
         animationType="slide"
         onRequestClose={closeModal}
       >
-        <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={closeModal} />
-        <KeyboardAvoidingView behavior="padding">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+          <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={closeModal} />
           <View style={styles.modalSheet}>
           <Text style={styles.modalTitle}>
             {modalDate ? `בחר דיווח ל-${formatDisplayDate(modalDate)}` : 'בחר דיווח'}
@@ -770,7 +770,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           <TouchableOpacity style={styles.modalCancel} onPress={closeModal}>
             <Text style={styles.modalCancelText}>ביטול</Text>
           </TouchableOpacity>
-        </View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 

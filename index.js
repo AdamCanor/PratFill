@@ -1,3 +1,4 @@
+import './src/tasks/autoSubmitTask';
 import { registerRootComponent } from 'expo';
 
 import App from './App';

@@ -13,7 +13,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -32,27 +32,18 @@ jobs:
         if: steps.cache-node.outputs.cache-hit != 'true'
         run: npm ci
 
-      - name: Cache Gradle
-        uses: actions/cache@v5
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ hashFiles('android/**/*.gradle*') }}-
+          cache-read-only: false
 
       - name: Build release APK
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease --parallel -PreactNativeArchitectures=armeabi-v7a,arm64-v8a
 
       - name: Upload APK
         uses: actions/upload-artifact@v5
         with:
           name: pratfill-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
-
-      - name: Publish OTA update
-        if: env.EXPO_TOKEN != ''
-        run: npx eas-cli update --branch production --message "${{ github.event.head_commit.message || 'CI update' }}" --non-interactive
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error

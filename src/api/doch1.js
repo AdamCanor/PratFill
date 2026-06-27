@@ -26,7 +26,7 @@ export async function clearCookies() {
 
 // --- Generic request helper ------------------------------------------
 
-class AuthError extends Error {
+export class AuthError extends Error {
   constructor(message) {
     super(message);
     this.name = 'AuthError';
@@ -65,7 +65,7 @@ async function request(path, { method = 'GET', headers = {}, body } = {}) {
   return res.text();
 }
 
-export { AuthError };
+
 
 // --- Endpoints ----------------------------------------------------------
 

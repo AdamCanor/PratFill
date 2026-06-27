@@ -18,6 +18,8 @@ import { getSettings, saveSettings, getCachedStatuses } from '../api/doch1';
 import { colors, spacing, radius } from '../theme';
 import { useTheme, ACCENT_PRESETS } from '../context/ThemeContext';
 
+import DateTimePicker from '@react-native-community/datetimepicker';
+
 I18nManager.forceRTL(true);
 
 const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
@@ -44,6 +46,9 @@ export default function SettingsScreen({ navigation }) {
   const styles = React.useMemo(() => makeStyles(accentColor, accentTextColor), [accentColor, accentTextColor]);
 
   const [commanderMode, setCommanderMode] = useState(false);
+  const [autoSubmit, setAutoSubmit] = useState({ enabled: false, presetId: '', time: '09:00' });
+  const [autoPresetModalVisible, setAutoPresetModalVisible] = useState(false);
+  const [timePickerVisible, setTimePickerVisible] = useState(false);
 
   const [quickButtons, setQuickButtons] = useState(DEFAULT_QUICK_BUTTONS);
   const [quickModalIndex, setQuickModalIndex] = useState(null);
@@ -74,6 +79,7 @@ export default function SettingsScreen({ navigation }) {
       const s = await getSettings();
       if (s?.commanderMode !== undefined) setCommanderMode(s.commanderMode);
       if (s?.quickButtons?.length === 2) setQuickButtons(s.quickButtons);
+      if (s?.autoSubmit) setAutoSubmit(s.autoSubmit);
       if (s?.weeklyPresets) {
         setPresets(s.weeklyPresets);
       } else if (s?.weeklyDefaults) {
@@ -136,7 +142,7 @@ export default function SettingsScreen({ navigation }) {
 
   const onSave = async () => {
     setSaving(true);
-    await saveSettings({ weeklyPresets: presets, quickButtons, commanderMode });
+    await saveSettings({ weeklyPresets: presets, quickButtons, commanderMode, autoSubmit });
     setSaving(false);
     navigation.goBack();
   };
@@ -230,6 +236,72 @@ export default function SettingsScreen({ navigation }) {
             </TouchableOpacity>
           ))}
 
+          <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>דיווח אוטומטי</Text>
+          <View style={styles.toggleRow}>
+            <Switch
+              value={autoSubmit.enabled}
+              onValueChange={(v) => setAutoSubmit((a) => ({ ...a, enabled: v }))}
+              trackColor={{ false: colors.border, true: accentColor + '88' }}
+              thumbColor={autoSubmit.enabled ? accentColor : colors.textMuted}
+            />
+            <View style={{ flex: 1, marginEnd: spacing.sm }}>
+              <Text style={styles.toggleLabel}>דיווח אוטומטי יומי</Text>
+              <Text style={styles.toggleMeta}>מלא את השבוע הקרוב ברקע לפי תבנית</Text>
+            </View>
+          </View>
+          {autoSubmit.enabled && (
+            <>
+              <TouchableOpacity
+                style={styles.quickBtnRow}
+                onPress={() => setAutoPresetModalVisible(true)}
+                activeOpacity={0.7}
+              >
+                <View style={{ flex: 1, marginEnd: spacing.sm }}>
+                  <Text style={styles.toggleLabel}>תבנית</Text>
+                  <Text style={styles.toggleMeta}>
+                    {presets.find((p) => p.id === autoSubmit.presetId)?.name || 'לא נבחרה'}
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-left" size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickBtnRow}
+                onPress={() => setTimePickerVisible(true)}
+                activeOpacity={0.7}
+              >
+                <View style={{ flex: 1, marginEnd: spacing.sm }}>
+                  <Text style={styles.toggleLabel}>שעת דיווח</Text>
+                  <Text style={styles.toggleMeta}>הדיווח יתבצע בחלון של ±30 דקות מהשעה</Text>
+                </View>
+                <View style={styles.timeChip}>
+                  <Text style={styles.timeChipText}>{autoSubmit.time}</Text>
+                </View>
+              </TouchableOpacity>
+              {timePickerVisible && (
+                <DateTimePicker
+                  mode="time"
+                  display="spinner"
+                  value={(() => {
+                    const [hh, mm] = (autoSubmit.time || '09:00').split(':').map(Number);
+                    const d = new Date();
+                    d.setHours(hh, mm, 0, 0);
+                    return d;
+                  })()}
+                  onValueChange={(date) => {
+                    setTimePickerVisible(false);
+                    if (!date) return;
+                    const hh = String(date.getHours()).padStart(2, '0');
+                    const mm = String(date.getMinutes()).padStart(2, '0');
+                    setAutoSubmit((a) => ({ ...a, time: `${hh}:${mm}` }));
+                  }}
+                  onDismiss={() => setTimePickerVisible(false)}
+                  is24Hour
+                />
+              )}
+
+            </>
+          )}
+
           <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>כללי</Text>
           <View style={styles.toggleRow}>
             <Switch
@@ -282,6 +354,39 @@ export default function SettingsScreen({ navigation }) {
             )}
           </TouchableOpacity>
         </View>
+
+        {/* Auto-submit preset picker modal */}
+        <Modal
+          visible={autoPresetModalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setAutoPresetModalVisible(false)}
+        >
+          <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => setAutoPresetModalVisible(false)} />
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>בחר תבנית לדיווח אוטומטי</Text>
+            <ScrollView>
+              {presets.map((p) => (
+                <TouchableOpacity
+                  key={p.id}
+                  style={[styles.modalOption, autoSubmit.presetId === p.id && { backgroundColor: accentColor + '22' }]}
+                  onPress={() => {
+                    setAutoSubmit((a) => ({ ...a, presetId: p.id }));
+                    setAutoPresetModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.modalOptionText}>{p.name}</Text>
+                  {autoSubmit.presetId === p.id && (
+                    <MaterialCommunityIcons name="check" size={16} color={accentColor} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setAutoPresetModalVisible(false)}>
+              <Text style={styles.modalCancelText}>ביטול</Text>
+            </TouchableOpacity>
+          </View>
+        </Modal>
 
         {/* Quick button picker modal (list view) */}
         <Modal
@@ -619,6 +724,23 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 2,
+  },
+
+
+  timeChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    minWidth: 72,
+    alignItems: 'center',
+    backgroundColor: colors.card,
+  },
+  timeChipText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '600',
   },
 
   // accent color swatches

@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   TextInput,
   Switch,
+  Keyboard,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { STATUSES as FALLBACK_STATUSES } from '../data/statuses';
@@ -60,6 +61,13 @@ export default function SettingsScreen({ navigation }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statuses, setStatuses] = useState(FALLBACK_STATUSES);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', e => setKeyboardHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -413,7 +421,7 @@ export default function SettingsScreen({ navigation }) {
           activeOpacity={1}
           onPress={() => setModalVisible(false)}
         />
-        <View style={styles.modalSheet}>
+        <View style={[styles.modalSheet, { marginBottom: keyboardHeight }]}>
           <Text style={styles.modalTitle}>
             {modalDay !== null
               ? `ברירת מחדל — ${DAY_NAMES[modalDay]}`
@@ -474,7 +482,7 @@ export default function SettingsScreen({ navigation }) {
               <Text style={styles.noteLabel}>הערה (אופציונלי)</Text>
               <TextInput
                 style={styles.noteInput}
-                placeholder="לדוגמה: חזרתי מוקדם"
+                placeholder="הזן הערה לדיווח הנוכחות"
                 placeholderTextColor={colors.textMuted}
                 value={modalNote}
                 onChangeText={setModalNote}

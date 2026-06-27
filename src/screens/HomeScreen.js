@@ -12,6 +12,7 @@ import {
   ScrollView,
   StatusBar,
   TextInput,
+  Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -163,6 +164,13 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
   const [modalSelectedSecondary, setModalSelectedSecondary] = useState(null);
   const [modalNote, setModalNote] = useState('');
   const [segLoading, setSegLoading] = useState({});
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', e => setKeyboardHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   // presets state
   const [weeklyPresets, setWeeklyPresets] = useState([]);
@@ -692,7 +700,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
         onRequestClose={closeModal}
       >
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={closeModal} />
-        <View style={styles.modalSheet}>
+        <View style={[styles.modalSheet, { marginBottom: keyboardHeight }]}>
           <Text style={styles.modalTitle}>
             {modalDate ? `בחר דיווח ל-${formatDisplayDate(modalDate)}` : 'בחר דיווח'}
           </Text>
@@ -747,7 +755,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
               <Text style={styles.noteLabel}>הערה (אופציונלי)</Text>
               <TextInput
                 style={styles.noteInput}
-                placeholder="לדוגמה: חזרתי מוקדם"
+                placeholder="הזן הערה לדיווח הנוכחות"
                 placeholderTextColor={colors.textMuted}
                 value={modalNote}
                 onChangeText={setModalNote}

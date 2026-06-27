@@ -7,6 +7,17 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
       - name: Checkout
         uses: actions/checkout@v5
 
@@ -45,8 +56,15 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
 
+      - name: Find APK
+        run: |
+          echo "=== android/app/build/outputs ==="
+          find android/app/build/outputs/apk/debug -name "*.apk" 2>/dev/null || echo "outputs dir empty or missing"
+          echo "=== android/app/build ==="
+          ls android/app/build/ 2>/dev/null || echo "build dir missing"
+
       - name: Upload dev client APK
         uses: actions/upload-artifact@v5
         with:
           name: pratfill-dev-client
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/debug/*.apk

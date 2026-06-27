@@ -17,7 +17,7 @@ import { STATUSES as FALLBACK_STATUSES } from '../data/statuses';
 import { getSettings, saveSettings, getCachedStatuses } from '../api/doch1';
 import { colors, spacing, radius } from '../theme';
 import { useTheme, ACCENT_PRESETS } from '../context/ThemeContext';
-import { runAutoSubmit } from '../tasks/autoSubmitTask';
+import { runAutoSubmit } from '../tasks/runAutoSubmit';
 
 I18nManager.forceRTL(true);
 

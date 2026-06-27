@@ -289,13 +289,14 @@ export default function SettingsScreen({ navigation }) {
                     d.setHours(hh, mm, 0, 0);
                     return d;
                   })()}
-                  onChange={(event, date) => {
+                  onValueChange={(date) => {
                     setTimePickerVisible(false);
-                    if (event.type === 'dismissed' || !date) return;
+                    if (!date) return;
                     const hh = String(date.getHours()).padStart(2, '0');
                     const mm = String(date.getMinutes()).padStart(2, '0');
                     setAutoSubmit((a) => ({ ...a, time: `${hh}:${mm}` }));
                   }}
+                  onDismiss={() => setTimePickerVisible(false)}
                   is24Hour
                 />
               )}

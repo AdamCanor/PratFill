@@ -58,4 +58,4 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: pratfill-dev-client
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/debug/*.apk

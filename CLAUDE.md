@@ -77,7 +77,8 @@ Pure JS changes do not require a prebuild.
 
 ## Development workflow
 - **Local testing:** `npx expo start --lan` — connects a physical phone on the same network via Expo Go.
-- **Feature branches:** develop on a branch, merge into `dev` when ready.
+- **Claude's working branch:** `claude/main` — all Claude Code changes go here. Never commit directly to `dev` or `main`.
+- **Merging:** when work is ready, merge `claude/main` → `dev` via PR, then `dev` → `main` for a release.
 - **No CI on `dev`** — `dev` pushes trigger nothing.
 - **Release:** merge `dev` → `main` via PR. On `main` push, CI builds a production APK and publishes a GitHub Release tagged `v{version}-{sha}`. `build-apk.yml` also runs on PRs into `main` and uploads the APK as a workflow artifact.
 - Merge PRs via `mcp__github__merge_pull_request` (owner: `AdamCanor`, repo: `PratFill`).

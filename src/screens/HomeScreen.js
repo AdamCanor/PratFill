@@ -145,6 +145,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
   const styles = React.useMemo(() => makeStyles(accentColor, accentTextColor), [accentColor, accentTextColor]);
 
   const [quickButtons, setQuickButtons] = useState(DEFAULT_QUICK_BUTTONS);
+  const [commanderMode, setCommanderMode] = useState(false);
 
   // loading=true so spinner shows immediately on mount — no flash of empty list
   const [loading, setLoading] = useState(true);
@@ -192,6 +193,9 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
       setWeeklyPresets(presets);
 
       if (s?.quickButtons?.length === 2) setQuickButtons(s.quickButtons);
+      const cm = !!s?.commanderMode;
+      setCommanderMode(cm);
+      if (!cm && activeTab === 'team') setActiveTab('personal');
 
       const cached = await getCachedStatuses();
       if (cached && cached.length > 0) setStatuses(cached);
@@ -589,6 +593,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
             דיווח אישי עתידי
           </Text>
         </TouchableOpacity>
+        {commanderMode && (
         <TouchableOpacity
           style={[styles.tab, activeTab === 'team' && styles.tabActive]}
           onPress={() => {
@@ -600,6 +605,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
             החיילים שלי
           </Text>
         </TouchableOpacity>
+      )}
       </View>
 
       {activeTab === 'team' ? (

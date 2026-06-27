@@ -9,6 +9,7 @@ import {
   I18nManager,
   ActivityIndicator,
   TextInput,
+  Switch,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { STATUSES as FALLBACK_STATUSES } from '../data/statuses';
@@ -41,6 +42,8 @@ export default function SettingsScreen({ navigation }) {
   const { accentColor, accentTextColor, setAccent } = useTheme();
   const styles = React.useMemo(() => makeStyles(accentColor, accentTextColor), [accentColor, accentTextColor]);
 
+  const [commanderMode, setCommanderMode] = useState(false);
+
   const [quickButtons, setQuickButtons] = useState(DEFAULT_QUICK_BUTTONS);
   const [quickModalIndex, setQuickModalIndex] = useState(null);
   const [quickModalMain, setQuickModalMain] = useState(null);
@@ -59,6 +62,7 @@ export default function SettingsScreen({ navigation }) {
   useEffect(() => {
     (async () => {
       const s = await getSettings();
+      if (s?.commanderMode !== undefined) setCommanderMode(s.commanderMode);
       if (s?.quickButtons?.length === 2) setQuickButtons(s.quickButtons);
       if (s?.weeklyPresets) {
         setPresets(s.weeklyPresets);
@@ -115,7 +119,7 @@ export default function SettingsScreen({ navigation }) {
 
   const onSave = async () => {
     setSaving(true);
-    await saveSettings({ weeklyPresets: presets, quickButtons });
+    await saveSettings({ weeklyPresets: presets, quickButtons, commanderMode });
     setSaving(false);
     navigation.goBack();
   };
@@ -208,6 +212,20 @@ export default function SettingsScreen({ navigation }) {
               <MaterialCommunityIcons name="chevron-left" size={18} color={colors.textMuted} />
             </TouchableOpacity>
           ))}
+
+          <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>כללי</Text>
+          <View style={styles.toggleRow}>
+            <Switch
+              value={commanderMode}
+              onValueChange={setCommanderMode}
+              trackColor={{ false: colors.border, true: accentColor + '88' }}
+              thumbColor={commanderMode ? accentColor : colors.textMuted}
+            />
+            <View style={{ flex: 1, marginEnd: spacing.sm }}>
+              <Text style={styles.toggleLabel}>מצב מפקד</Text>
+              <Text style={styles.toggleMeta}>הצג לשונית ניהול חיילים</Text>
+            </View>
+          </View>
 
           <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>צבע ראשי</Text>
           <View style={styles.swatchRow}>
@@ -529,6 +547,30 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
     paddingVertical: 4,
   },
   quickBtnChipText: { fontSize: 14, fontWeight: '600' },
+
+  // commander toggle
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.md,
+  },
+  toggleLabel: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  toggleMeta: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
+  },
 
   // accent color swatches
   swatchRow: {

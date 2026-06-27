@@ -31,7 +31,7 @@ import {
   updateAndSendPrat,
 } from '../api/doch1';
 import { getSecondaryLabel, STATUSES as FALLBACK_STATUSES } from '../data/statuses';
-import { getUpcomingDates, monthsToQuery } from '../utils/dates';
+import { getUpcomingDates, monthsToQuery, normalizeDate } from '../utils/dates';
 import { colors, spacing, radius } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 
@@ -52,14 +52,6 @@ function parseDateFromApiDate(apiDate) {
   return new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
 }
 
-function normalizeDate(report) {
-  const raw = report?.date;
-  if (!raw) return '';
-  const d = new Date(raw);
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  return `${dd}.${mm}.${d.getFullYear()}`;
-}
 
 function getSecondaryLabelFromList(statuses, mainCode, secondaryCode) {
   const main = statuses.find((s) => s.statusCode === mainCode);

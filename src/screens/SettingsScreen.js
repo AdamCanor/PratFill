@@ -11,6 +11,7 @@ import {
   TextInput,
   Switch,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { STATUSES as FALLBACK_STATUSES } from '../data/statuses';
 import { getSettings, saveSettings, getCachedStatuses } from '../api/doch1';
@@ -413,6 +414,7 @@ export default function SettingsScreen({ navigation }) {
           activeOpacity={1}
           onPress={() => setModalVisible(false)}
         />
+        <KeyboardAvoidingView behavior="padding">
         <View style={styles.modalSheet}>
           <Text style={styles.modalTitle}>
             {modalDay !== null
@@ -474,7 +476,7 @@ export default function SettingsScreen({ navigation }) {
               <Text style={styles.noteLabel}>הערה (אופציונלי)</Text>
               <TextInput
                 style={styles.noteInput}
-                placeholder="לדוגמה: חזרתי מוקדם"
+                placeholder="הזן הערה לדיווח הנוכחות"
                 placeholderTextColor={colors.textMuted}
                 value={modalNote}
                 onChangeText={setModalNote}
@@ -498,6 +500,7 @@ export default function SettingsScreen({ navigation }) {
             <Text style={styles.modalCancelText}>ביטול</Text>
           </TouchableOpacity>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

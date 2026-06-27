@@ -13,6 +13,7 @@ import {
   StatusBar,
   TextInput,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -692,6 +693,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
         onRequestClose={closeModal}
       >
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={closeModal} />
+        <KeyboardAvoidingView behavior="padding">
         <View style={styles.modalSheet}>
           <Text style={styles.modalTitle}>
             {modalDate ? `בחר דיווח ל-${formatDisplayDate(modalDate)}` : 'בחר דיווח'}
@@ -747,7 +749,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
               <Text style={styles.noteLabel}>הערה (אופציונלי)</Text>
               <TextInput
                 style={styles.noteInput}
-                placeholder="לדוגמה: חזרתי מוקדם"
+                placeholder="הזן הערה לדיווח הנוכחות"
                 placeholderTextColor={colors.textMuted}
                 value={modalNote}
                 onChangeText={setModalNote}
@@ -768,6 +770,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
             <Text style={styles.modalCancelText}>ביטול</Text>
           </TouchableOpacity>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Team status picker modal */}

@@ -693,9 +693,9 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
         animationType="slide"
         onRequestClose={closeModal}
       >
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={closeModal} />
-          <View style={styles.modalSheet}>
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={closeModal} />
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={styles.modalSheet}>
           <Text style={styles.modalTitle}>
             {modalDate ? `בחר דיווח ל-${formatDisplayDate(modalDate)}` : 'בחר דיווח'}
           </Text>
@@ -750,8 +750,6 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
               <Text style={styles.noteLabel}>הערה (אופציונלי)</Text>
               <TextInput
                 style={styles.noteInput}
-                placeholder="הזן הערה לדיווח הנוכחות"
-                placeholderTextColor={colors.textMuted}
                 value={modalNote}
                 onChangeText={setModalNote}
                 textAlign="right"
@@ -770,7 +768,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           <TouchableOpacity style={styles.modalCancel} onPress={closeModal}>
             <Text style={styles.modalCancelText}>ביטול</Text>
           </TouchableOpacity>
-          </View>
+        </View>
         </KeyboardAvoidingView>
       </Modal>
 

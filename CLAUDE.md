@@ -10,8 +10,8 @@ React Native / Expo app (SDK 56) for IDF soldiers to submit future attendance re
 ## Commands
 
 ```bash
-npx expo start --lan   # Dev server for local phone testing (LAN mode)
-npm run android        # Build and run on Android emulator
+npm start          # Expo dev server
+npm run android    # Build and run on Android device/emulator
 ```
 
 No test or lint scripts are configured.
@@ -75,11 +75,10 @@ git commit -m "Update android/ after adding <package>"
 
 Pure JS changes do not require a prebuild.
 
-## Development workflow
-- **Local testing:** `npx expo start --lan` — connects a physical phone on the same network via Expo Go.
-- **Feature branches:** develop on a branch, merge into `dev` when ready.
-- **No CI on `dev`** — `dev` pushes trigger nothing.
-- **Release:** merge `dev` → `main` via PR. On `main` push, CI builds a production APK and publishes a GitHub Release tagged `v{version}-{sha}`. `build-apk.yml` also runs on PRs into `main` and uploads the APK as a workflow artifact.
+## CI & branch workflow
+- **Development branch:** `dev` — no CI runs on `dev` pushes.
+- **Release:** merge `dev` → `main` via PR — `release.yml` triggers on `main` push and publishes a GitHub Release tagged `v{version}-{sha}`.
+- `build-apk.yml` also triggers on `main` push and on PRs into `main`; it uploads the APK as a workflow artifact and optionally pushes an OTA update via EAS (only if `EXPO_TOKEN` secret is set).
 - Merge PRs via `mcp__github__merge_pull_request` (owner: `AdamCanor`, repo: `PratFill`).
 
 ## Cookie library

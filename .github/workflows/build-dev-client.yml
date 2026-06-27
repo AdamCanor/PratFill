@@ -44,3 +44,4 @@ jobs:
         with:
           name: pratfill-dev-client
           path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

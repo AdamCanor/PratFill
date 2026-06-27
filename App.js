@@ -7,7 +7,8 @@ import { registerAutoSubmitTask } from './src/tasks/autoSubmitTask';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: false,
     shouldSetBadge: false,
   }),

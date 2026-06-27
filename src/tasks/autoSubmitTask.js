@@ -6,14 +6,14 @@ export { runAutoSubmit };
 
 try {
   const TaskManager = require('expo-task-manager');
-  const BackgroundFetch = require('expo-background-fetch');
+  const BackgroundTask = require('expo-background-task');
   const Notifications = require('expo-notifications');
 
   TaskManager.defineTask(TASK_NAME, async () => {
     try {
       const result = await runAutoSubmit();
-      if (result.skipped) return BackgroundFetch.BackgroundFetchResult.NoData;
-      return BackgroundFetch.BackgroundFetchResult.NewData;
+      if (result.skipped) return BackgroundTask.BackgroundTaskResult.Success;
+      return BackgroundTask.BackgroundTaskResult.Success;
     } catch (e) {
       if (e instanceof AuthError) {
         await Notifications.scheduleNotificationAsync({
@@ -23,9 +23,9 @@ try {
           },
           trigger: null,
         });
-        return BackgroundFetch.BackgroundFetchResult.Failed;
+        return BackgroundTask.BackgroundTaskResult.Failed;
       }
-      return BackgroundFetch.BackgroundFetchResult.Failed;
+      return BackgroundTask.BackgroundTaskResult.Failed;
     }
   });
 } catch (_) {
@@ -35,21 +35,12 @@ try {
 export async function registerAutoSubmitTask() {
   try {
     const TaskManager = require('expo-task-manager');
-    const BackgroundFetch = require('expo-background-fetch');
+    const BackgroundTask = require('expo-background-task');
 
-    const status = await BackgroundFetch.getStatusAsync();
-    if (
-      status === BackgroundFetch.BackgroundFetchStatus.Restricted ||
-      status === BackgroundFetch.BackgroundFetchStatus.Denied
-    ) {
-      return;
-    }
     const isRegistered = await TaskManager.isTaskRegisteredAsync(TASK_NAME);
     if (!isRegistered) {
-      await BackgroundFetch.registerTaskAsync(TASK_NAME, {
+      await BackgroundTask.registerTaskAsync(TASK_NAME, {
         minimumInterval: 15 * 60,
-        stopOnTerminate: false,
-        startOnBoot: true,
       });
     }
   } catch (_) {

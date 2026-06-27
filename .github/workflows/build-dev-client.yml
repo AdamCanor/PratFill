@@ -1,4 +1,4 @@
-name: Build Android APK (release)
+name: Build Dev Client APK
 
 on:
   workflow_dispatch: {}
@@ -13,7 +13,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 20
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -32,18 +32,21 @@ jobs:
         if: steps.cache-node.outputs.cache-hit != 'true'
         run: npm ci
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Cache Gradle
+        uses: actions/cache@v5
         with:
-          cache-read-only: false
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ hashFiles('android/**/*.gradle*') }}-
 
-      - name: Build release APK
+      - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleRelease --parallel -x lintVitalAnalyzeRelease -PreactNativeArchitectures=armeabi-v7a,arm64-v8a
+        run: ./gradlew assembleDebug --no-daemon
 
-      - name: Upload APK
+      - name: Upload dev client APK
         uses: actions/upload-artifact@v5
         with:
-          name: pratfill-apk
-          path: android/app/build/outputs/apk/release/*.apk
-          if-no-files-found: error
+          name: pratfill-dev-client
+          path: android/app/build/outputs/apk/debug/app-debug.apk

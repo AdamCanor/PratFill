@@ -410,7 +410,7 @@ export default function SettingsScreen({ navigation }) {
         animationType="slide"
         onRequestClose={() => setModalVisible(false)}
       >
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <TouchableOpacity
             style={styles.backdrop}
             activeOpacity={1}

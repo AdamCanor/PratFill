@@ -12,8 +12,8 @@ import {
   ScrollView,
   StatusBar,
   TextInput,
+  Keyboard,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -156,6 +156,13 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
   const [modalSelectedSecondary, setModalSelectedSecondary] = useState(null);
   const [modalNote, setModalNote] = useState('');
   const [segLoading, setSegLoading] = useState({});
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', e => setKeyboardHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   // presets state
   const [weeklyPresets, setWeeklyPresets] = useState([]);
@@ -685,8 +692,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
         onRequestClose={closeModal}
       >
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={closeModal} />
-        <KeyboardAvoidingView behavior="padding">
-        <View style={styles.modalSheet}>
+        <View style={[styles.modalSheet, { marginBottom: keyboardHeight }]}>
           <Text style={styles.modalTitle}>
             {modalDate ? `בחר דיווח ל-${formatDisplayDate(modalDate)}` : 'בחר דיווח'}
           </Text>
@@ -762,7 +768,6 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
             <Text style={styles.modalCancelText}>ביטול</Text>
           </TouchableOpacity>
         </View>
-        </KeyboardAvoidingView>
       </Modal>
 
       {/* Team status picker modal */}

@@ -84,7 +84,7 @@ Pure JS changes do not require a prebuild.
 - **GitHub Actions workflows (all in `.github/workflows/`):**
   - `release.yml` — auto on `main` push; builds release APK, creates GitHub Release
   - `build-apk.yml` — manual dispatch only; builds release APK, uploads as artifact (useful for testing release builds without merging to main)
-  - `build-dev-client.yml` — manual dispatch only; builds debug APK (arm64-v8a only), uploads as artifact
+  - `build-dev-client.yml` — manual dispatch only; builds debug APK, uploads as artifact
 - Merge PRs via `mcp__github__merge_pull_request` (owner: `AdamCanor`, repo: `PratFill`).
 
 ## Cookie library

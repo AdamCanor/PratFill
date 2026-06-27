@@ -8,13 +8,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk/21* \
-            /usr/local/lib/android/sdk/ndk/23* /usr/local/lib/android/sdk/ndk/25* \
-            /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/go \
-            /opt/hostedtoolcache/Ruby /opt/hostedtoolcache/PyPy
-          sudo apt-get clean
-          df -h
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
 
       - name: Checkout
         uses: actions/checkout@v5
@@ -52,12 +54,12 @@ jobs:
 
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon -Pandroid.injected.build.abi=arm64-v8a
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Find APK
         run: |
           echo "=== android/app/build/outputs ==="
-          find android/app/build/outputs -type f 2>/dev/null || echo "outputs dir empty or missing"
+          find android/app/build/outputs/apk/debug -name "*.apk" 2>/dev/null || echo "outputs dir empty or missing"
           echo "=== android/app/build ==="
           ls android/app/build/ 2>/dev/null || echo "build dir missing"
 

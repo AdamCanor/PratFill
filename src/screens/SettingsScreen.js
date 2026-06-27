@@ -411,6 +411,7 @@ export default function SettingsScreen({ navigation }) {
         onRequestClose={() => setModalVisible(false)}
       >
         <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => setModalVisible(false)} />
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
         <KeyboardAvoidingView behavior="padding">
           <View style={styles.modalSheet}>
           <Text style={styles.modalTitle}>
@@ -498,6 +499,7 @@ export default function SettingsScreen({ navigation }) {
           </TouchableOpacity>
         </View>
         </KeyboardAvoidingView>
+        </View>
       </Modal>
     </View>
   );

@@ -18,6 +18,7 @@ import { getSettings, saveSettings, getCachedStatuses } from '../api/doch1';
 import { colors, spacing, radius } from '../theme';
 import { useTheme, ACCENT_PRESETS } from '../context/ThemeContext';
 import { runAutoSubmit } from '../tasks/runAutoSubmit';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 I18nManager.forceRTL(true);
 
@@ -47,6 +48,7 @@ export default function SettingsScreen({ navigation }) {
   const [commanderMode, setCommanderMode] = useState(false);
   const [autoSubmit, setAutoSubmit] = useState({ enabled: false, presetId: '', time: '09:00' });
   const [autoPresetModalVisible, setAutoPresetModalVisible] = useState(false);
+  const [timePickerVisible, setTimePickerVisible] = useState(false);
   const [testingAutoSubmit, setTestingAutoSubmit] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
@@ -264,21 +266,39 @@ export default function SettingsScreen({ navigation }) {
                 </View>
                 <MaterialCommunityIcons name="chevron-left" size={18} color={colors.textMuted} />
               </TouchableOpacity>
-              <View style={styles.quickBtnRow}>
+              <TouchableOpacity
+                style={styles.quickBtnRow}
+                onPress={() => setTimePickerVisible(true)}
+                activeOpacity={0.7}
+              >
                 <View style={{ flex: 1, marginEnd: spacing.sm }}>
-                  <Text style={styles.toggleLabel}>שעת דיווח (HH:MM)</Text>
+                  <Text style={styles.toggleLabel}>שעת דיווח</Text>
                   <Text style={styles.toggleMeta}>הדיווח יתבצע בחלון של ±30 דקות מהשעה</Text>
                 </View>
-                <TextInput
-                  style={styles.timeInput}
-                  value={autoSubmit.time}
-                  onChangeText={(v) => setAutoSubmit((a) => ({ ...a, time: v }))}
-                  placeholder="09:00"
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType="numbers-and-punctuation"
-                  maxLength={5}
+                <View style={styles.timeChip}>
+                  <Text style={styles.timeChipText}>{autoSubmit.time}</Text>
+                </View>
+              </TouchableOpacity>
+              {timePickerVisible && (
+                <DateTimePicker
+                  mode="time"
+                  display="spinner"
+                  value={(() => {
+                    const [hh, mm] = (autoSubmit.time || '09:00').split(':').map(Number);
+                    const d = new Date();
+                    d.setHours(hh, mm, 0, 0);
+                    return d;
+                  })()}
+                  onChange={(event, date) => {
+                    setTimePickerVisible(false);
+                    if (event.type === 'dismissed' || !date) return;
+                    const hh = String(date.getHours()).padStart(2, '0');
+                    const mm = String(date.getMinutes()).padStart(2, '0');
+                    setAutoSubmit((a) => ({ ...a, time: `${hh}:${mm}` }));
+                  }}
+                  is24Hour
                 />
-              </View>
+              )}
               <TouchableOpacity
                 style={[styles.testAutoBtn, testingAutoSubmit && { opacity: 0.6 }]}
                 disabled={testingAutoSubmit}
@@ -754,18 +774,20 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
     marginTop: spacing.xs,
   },
 
-  timeInput: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
+  timeChip: {
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: 6,
     minWidth: 72,
-    textAlign: 'center',
+    alignItems: 'center',
     backgroundColor: colors.card,
+  },
+  timeChipText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '600',
   },
 
   // accent color swatches

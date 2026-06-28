@@ -4,9 +4,13 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: release-${{ github.sha }}
+  cancel-in-progress: true
+
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
@@ -17,6 +21,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+          cache: 'npm'
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -24,25 +29,18 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Cache node_modules
-        id: cache-node
-        uses: actions/cache@v5
-        with:
-          path: node_modules
-          key: node-${{ hashFiles('package-lock.json') }}
-
       - name: Install dependencies
-        if: steps.cache-node.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
+          build-scan-publish: false
 
       - name: Build release APK
         working-directory: android
-        run: ./gradlew assembleRelease --parallel -x lintVitalAnalyzeRelease -PreactNativeArchitectures=armeabi-v7a,arm64-v8a
+        run: ./gradlew assembleRelease --parallel --configuration-cache -x lintVitalAnalyzeRelease -PreactNativeArchitectures=armeabi-v7a,arm64-v8a
 
       - name: Get release tag
         id: tag

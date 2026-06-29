@@ -11,7 +11,7 @@ const LOGGED_IN_PATH_HINTS = ['/hp', '/secondaries', '/calendar', '/primaries'];
 export default function LoginScreen({ navigation }) {
   const webviewRef = useRef(null);
   const [checking, setChecking] = useState(false);
-  const [status, setStatus] = useState('טוען...');
+  const [status, setStatus] = useState('ממתין להתחברות...');
 
   const checkCookie = useCallback(async () => {
     if (checking) return;

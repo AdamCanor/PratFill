@@ -48,13 +48,15 @@ export async function checkForUpdate() {
   const latestSha = parseShortSha(release.tag_name);
 
   if (CURRENT_SHA) {
-    // Release build: compare SHAs — any new release is an update
+    // New release APK: SHA embedded by CI — exact match means up to date
     if (latestSha && CURRENT_SHA === latestSha) return null;
-  } else {
-    // Dev build fallback: compare semver
+  } else if (__DEV__) {
+    // Dev build: semver comparison so developers aren't nagged
     const latestVersion = parseVersionFromTag(release.tag_name);
     if (!latestVersion || !isNewerVersion(CURRENT_VERSION, latestVersion)) return null;
   }
+  // Old release APK (no embedded SHA, not a dev build): always prompt —
+  // once the user installs a SHA-embedded build this branch is never taken again
 
   const apkAsset = release.assets?.find(a => a.name.endsWith('.apk'));
   if (!apkAsset) return null;

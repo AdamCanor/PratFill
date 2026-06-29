@@ -4,7 +4,6 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import Constants from 'expo-constants';
 
 const RELEASES_API = 'https://api.github.com/repos/AdamCanor/PratFill/releases/latest';
-const CURRENT_VERSION = Constants.expoConfig?.version ?? '0.0.0';
 const CURRENT_SHA = Constants.expoConfig?.extra?.buildSha ?? null;
 
 function parseVersionFromTag(tag) {
@@ -15,16 +14,6 @@ function parseVersionFromTag(tag) {
 function parseShortSha(tag) {
   const match = tag.match(/^v[\d.]+-([a-f0-9]+)$/);
   return match ? match[1] : null;
-}
-
-function isNewerVersion(current, latest) {
-  const c = current.split('.').map(Number);
-  const l = latest.split('.').map(Number);
-  for (let i = 0; i < 3; i++) {
-    if (l[i] > c[i]) return true;
-    if (l[i] < c[i]) return false;
-  }
-  return false;
 }
 
 export async function checkForUpdate() {
@@ -47,16 +36,8 @@ export async function checkForUpdate() {
 
   const latestSha = parseShortSha(release.tag_name);
 
-  if (CURRENT_SHA) {
-    // New release APK: SHA embedded by CI — exact match means up to date
-    if (latestSha && CURRENT_SHA === latestSha) return null;
-  } else if (__DEV__) {
-    // Dev build: semver comparison so developers aren't nagged
-    const latestVersion = parseVersionFromTag(release.tag_name);
-    if (!latestVersion || !isNewerVersion(CURRENT_VERSION, latestVersion)) return null;
-  }
-  // Old release APK (no embedded SHA, not a dev build): always prompt —
-  // once the user installs a SHA-embedded build this branch is never taken again
+  // Up to date only when the embedded SHA exactly matches the latest release SHA
+  if (CURRENT_SHA && latestSha && CURRENT_SHA === latestSha) return null;
 
   const apkAsset = release.assets?.find(a => a.name.endsWith('.apk'));
   if (!apkAsset) return null;

@@ -38,6 +38,16 @@ jobs:
           cache-read-only: false
           build-scan-publish: false
 
+      - name: Embed build SHA
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          node -e "
+            const fs = require('fs');
+            const app = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+            app.expo.extra = { ...(app.expo.extra || {}), buildSha: '$SHA' };
+            fs.writeFileSync('app.json', JSON.stringify(app, null, 2) + '\n');
+          "
+
       - name: Build release APK
         working-directory: android
         run: ./gradlew assembleRelease --parallel --no-configuration-cache -x lintVitalAnalyzeRelease -PreactNativeArchitectures=armeabi-v7a,arm64-v8a

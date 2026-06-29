@@ -22,9 +22,17 @@ function isNewerVersion(current, latest) {
 }
 
 export async function checkForUpdate() {
-  const res = await fetch(RELEASES_API, {
-    headers: { Accept: 'application/vnd.github+json' },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  let res;
+  try {
+    res = await fetch(RELEASES_API, {
+      headers: { Accept: 'application/vnd.github+json' },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!res.ok) throw new Error(`GitHub API ${res.status}`);
   const release = await res.json();
 

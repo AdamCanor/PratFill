@@ -39,7 +39,7 @@ jobs:
 
       - name: Build release APK
         working-directory: android
-        run: ./gradlew assembleRelease --parallel -x lintVitalAnalyzeRelease -PreactNativeArchitectures=armeabi-v7a,arm64-v8a
+        run: ./gradlew assembleRelease --parallel --no-configuration-cache -x lintVitalAnalyzeRelease -PreactNativeArchitectures=armeabi-v7a,arm64-v8a
 
       - name: Upload APK
         uses: actions/upload-artifact@v5

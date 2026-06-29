@@ -896,6 +896,7 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
   },
   modalOptionSelected: {
     borderColor: accent,
+    borderBottomColor: accent,
     borderWidth: 1,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm,

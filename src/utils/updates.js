@@ -1,4 +1,5 @@
-import * as FileSystem from 'expo-file-system';
+import { DownloadTask, Paths, File } from 'expo-file-system';
+import { getContentUriAsync } from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
 import Constants from 'expo-constants';
 
@@ -42,29 +43,22 @@ export async function checkForUpdate() {
 }
 
 export async function downloadApk(downloadUrl, onProgress) {
-  const destUri = FileSystem.cacheDirectory + 'pratfill-update.apk';
+  const destFile = new File(Paths.cache, 'pratfill-update.apk');
 
-  const existing = await FileSystem.getInfoAsync(destUri);
-  if (existing.exists) await FileSystem.deleteAsync(destUri, { idempotent: true });
+  try { destFile.delete(); } catch {}
 
-  const task = FileSystem.createDownloadResumable(
-    downloadUrl,
-    destUri,
-    {},
-    ({ totalBytesWritten, totalBytesExpectedToWrite }) => {
-      if (totalBytesExpectedToWrite > 0) {
-        onProgress(totalBytesWritten / totalBytesExpectedToWrite);
-      }
-    }
-  );
+  const task = new DownloadTask(downloadUrl, destFile);
+  task.addListener('progress', ({ bytesWritten, totalBytes }) => {
+    if (totalBytes > 0) onProgress(bytesWritten / totalBytes);
+  });
 
-  const result = await task.downloadAsync();
-  if (!result?.uri) throw new Error('Download failed');
-  return result.uri;
+  const downloaded = await task.downloadAsync();
+  if (!downloaded?.uri) throw new Error('Download failed');
+  return downloaded.uri;
 }
 
 export async function installApk(localUri) {
-  const contentUri = await FileSystem.getContentUriAsync(localUri);
+  const contentUri = await getContentUriAsync(localUri);
   await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
     data: contentUri,
     flags: 1, // FLAG_GRANT_READ_URI_PERMISSION

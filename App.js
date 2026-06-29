@@ -23,14 +23,17 @@ export default function App() {
   useEffect(() => {
     Notifications.requestPermissionsAsync();
     registerAutoSubmitTask().catch(() => {});
-    checkForUpdate()
-      .then(info => {
-        if (info) {
-          setUpdateInfo(info);
-          setShowUpdate(true);
-        }
-      })
-      .catch(() => {});
+    const updateTimer = setTimeout(() => {
+      checkForUpdate()
+        .then(info => {
+          if (info) {
+            setUpdateInfo(info);
+            setShowUpdate(true);
+          }
+        })
+        .catch(() => {});
+    }, 5000);
+    return () => clearTimeout(updateTimer);
   }, []);
 
   return (

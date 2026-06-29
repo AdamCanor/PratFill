@@ -17,6 +17,8 @@ import { STATUSES as FALLBACK_STATUSES } from '../data/statuses';
 import { getSettings, saveSettings, getCachedStatuses } from '../api/doch1';
 import { colors, spacing, radius } from '../theme';
 import { useTheme, ACCENT_PRESETS } from '../context/ThemeContext';
+import UpdateModal from '../components/UpdateModal';
+import { checkForUpdate } from '../utils/updates';
 
 import DateTimePicker from '@react-native-community/datetimepicker';
 
@@ -67,6 +69,10 @@ export default function SettingsScreen({ navigation }) {
   const [saving, setSaving] = useState(false);
   const [statuses, setStatuses] = useState(FALLBACK_STATUSES);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [upToDate, setUpToDate] = useState(false);
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', e => setKeyboardHeight(e.endCoordinates.height));
@@ -315,6 +321,52 @@ export default function SettingsScreen({ navigation }) {
               <Text style={styles.toggleMeta}>הצג לשונית ניהול חיילים</Text>
             </View>
           </View>
+
+          <TouchableOpacity
+            style={styles.updateRow}
+            onPress={async () => {
+              if (checkingUpdate) return;
+              setCheckingUpdate(true);
+              setUpToDate(false);
+              try {
+                const info = await checkForUpdate();
+                if (info) {
+                  setUpdateInfo(info);
+                  setShowUpdateModal(true);
+                } else {
+                  setUpToDate(true);
+                  setTimeout(() => setUpToDate(false), 3000);
+                }
+              } catch {
+                setUpToDate(false);
+              } finally {
+                setCheckingUpdate(false);
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={{ flex: 1, marginEnd: spacing.sm }}>
+              <Text style={styles.toggleLabel}>בדוק עדכונים</Text>
+              <Text style={styles.toggleMeta}>
+                {upToDate ? 'האפליקציה מעודכנת ✓' : 'חפש גרסה חדשה'}
+              </Text>
+            </View>
+            {checkingUpdate ? (
+              <ActivityIndicator size="small" color={accentColor} />
+            ) : (
+              <MaterialCommunityIcons
+                name={upToDate ? 'check-circle' : 'arrow-up-circle-outline'}
+                size={24}
+                color={upToDate ? colors.success : accentColor}
+              />
+            )}
+          </TouchableOpacity>
+
+          <UpdateModal
+            visible={showUpdateModal}
+            updateInfo={updateInfo}
+            onDismiss={() => setShowUpdateModal(false)}
+          />
 
           <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>צבע ראשי</Text>
           <View style={styles.swatchRow}>
@@ -702,6 +754,18 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
   },
   quickBtnChipText: { fontSize: 14, fontWeight: '600' },
 
+  updateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.md,
+  },
   // commander toggle
   toggleRow: {
     flexDirection: 'row',

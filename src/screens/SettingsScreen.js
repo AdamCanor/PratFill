@@ -73,6 +73,7 @@ export default function SettingsScreen({ navigation }) {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [upToDate, setUpToDate] = useState(false);
+  const [updateError, setUpdateError] = useState(false);
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', e => setKeyboardHeight(e.endCoordinates.height));
@@ -328,6 +329,7 @@ export default function SettingsScreen({ navigation }) {
               if (checkingUpdate) return;
               setCheckingUpdate(true);
               setUpToDate(false);
+              setUpdateError(false);
               try {
                 const info = await checkForUpdate();
                 if (info) {
@@ -338,7 +340,8 @@ export default function SettingsScreen({ navigation }) {
                   setTimeout(() => setUpToDate(false), 3000);
                 }
               } catch {
-                setUpToDate(false);
+                setUpdateError(true);
+                setTimeout(() => setUpdateError(false), 3000);
               } finally {
                 setCheckingUpdate(false);
               }
@@ -347,17 +350,17 @@ export default function SettingsScreen({ navigation }) {
           >
             <View style={{ flex: 1, marginEnd: spacing.sm }}>
               <Text style={styles.toggleLabel}>בדוק עדכונים</Text>
-              <Text style={styles.toggleMeta}>
-                {upToDate ? 'האפליקציה מעודכנת ✓' : 'חפש גרסה חדשה'}
+              <Text style={[styles.toggleMeta, updateError && { color: colors.danger }]}>
+                {updateError ? 'שגיאה בבדיקה, נסה שוב' : upToDate ? 'האפליקציה מעודכנת ✓' : 'חפש גרסה חדשה'}
               </Text>
             </View>
             {checkingUpdate ? (
               <ActivityIndicator size="small" color={accentColor} />
             ) : (
               <MaterialCommunityIcons
-                name={upToDate ? 'check-circle' : 'arrow-up-circle-outline'}
+                name={updateError ? 'alert-circle-outline' : upToDate ? 'check-circle' : 'arrow-up-circle-outline'}
                 size={24}
-                color={upToDate ? colors.success : accentColor}
+                color={updateError ? colors.danger : upToDate ? colors.success : accentColor}
               />
             )}
           </TouchableOpacity>

@@ -27,7 +27,7 @@ export async function checkForUpdate() {
   let res;
   try {
     res = await fetch(RELEASES_API, {
-      headers: { Accept: 'application/vnd.github+json' },
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'PratFill-App' },
       signal: controller.signal,
     });
   } finally {

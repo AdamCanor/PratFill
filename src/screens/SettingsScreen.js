@@ -19,6 +19,7 @@ import { colors, spacing, radius } from '../theme';
 import { useTheme, ACCENT_PRESETS } from '../context/ThemeContext';
 import UpdateModal from '../components/UpdateModal';
 import { checkForUpdate } from '../utils/updates';
+import { runAutoSubmit, getLastAutoSubmitRun } from '../tasks/runAutoSubmit';
 
 import DateTimePicker from '@react-native-community/datetimepicker';
 
@@ -43,6 +44,21 @@ function countSetDays(weeklyDefaults) {
   return Object.values(weeklyDefaults || {}).filter(Boolean).length;
 }
 
+function describeLastRun(lastRun) {
+  if (!lastRun) return 'טרם בוצעה הרצה';
+  const time = new Date(lastRun.at).toLocaleString('he-IL', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  if (lastRun.error === 'auth') return `${time} — נדרשת התחברות מחדש`;
+  if (lastRun.error) return `${time} — שגיאה`;
+  if (lastRun.skipped) return `${time} — לא בוצעה פעולה (${lastRun.reason})`;
+  if (lastRun.count > 0) return `${time} — נוספו דיווחים ל-${lastRun.count} ימים`;
+  return `${time} — כל הימים כבר מדווחים`;
+}
+
 export default function SettingsScreen({ navigation }) {
   const { accentColor, accentTextColor, setAccent } = useTheme();
   const styles = React.useMemo(() => makeStyles(accentColor, accentTextColor), [accentColor, accentTextColor]);
@@ -51,6 +67,8 @@ export default function SettingsScreen({ navigation }) {
   const [autoSubmit, setAutoSubmit] = useState({ enabled: false, presetId: '', time: '09:00' });
   const [autoPresetModalVisible, setAutoPresetModalVisible] = useState(false);
   const [timePickerVisible, setTimePickerVisible] = useState(false);
+  const [runningNow, setRunningNow] = useState(false);
+  const [lastRun, setLastRun] = useState(null);
 
   const [quickButtons, setQuickButtons] = useState(DEFAULT_QUICK_BUTTONS);
   const [quickModalIndex, setQuickModalIndex] = useState(null);
@@ -95,8 +113,21 @@ export default function SettingsScreen({ navigation }) {
       }
       const cached = await getCachedStatuses();
       if (cached && cached.length > 0) setStatuses(cached);
+      setLastRun(await getLastAutoSubmitRun());
     })();
   }, []);
+
+  const handleRunNow = async () => {
+    setRunningNow(true);
+    try {
+      await saveSettings({ weeklyPresets: presets, quickButtons, commanderMode, autoSubmit });
+      await runAutoSubmit();
+    } catch {
+    } finally {
+      setLastRun(await getLastAutoSubmitRun());
+      setRunningNow(false);
+    }
+  };
 
   const selectedPreset = presets.find((p) => p.id === selectedPresetId) || null;
 
@@ -278,11 +309,27 @@ export default function SettingsScreen({ navigation }) {
               >
                 <View style={{ flex: 1, marginEnd: spacing.sm }}>
                   <Text style={styles.toggleLabel}>שעת דיווח</Text>
-                  <Text style={styles.toggleMeta}>הדיווח יתבצע בחלון של ±30 דקות מהשעה</Text>
+                  <Text style={styles.toggleMeta}>הדיווח רץ ברקע — ייתכן פער של מספר שעות מהשעה שנבחרה, בהתאם למערכת ההפעלה</Text>
                 </View>
                 <View style={styles.timeChip}>
                   <Text style={styles.timeChipText}>{autoSubmit.time}</Text>
                 </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.updateRow}
+                onPress={handleRunNow}
+                disabled={runningNow}
+                activeOpacity={0.7}
+              >
+                <View style={{ flex: 1, marginEnd: spacing.sm }}>
+                  <Text style={styles.toggleLabel}>הרץ עכשיו</Text>
+                  <Text style={styles.toggleMeta}>{describeLastRun(lastRun)}</Text>
+                </View>
+                {runningNow ? (
+                  <ActivityIndicator size="small" color={accentColor} />
+                ) : (
+                  <MaterialCommunityIcons name="play-circle-outline" size={24} color={accentColor} />
+                )}
               </TouchableOpacity>
               {timePickerVisible && (
                 <DateTimePicker

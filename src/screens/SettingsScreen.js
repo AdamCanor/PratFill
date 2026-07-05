@@ -341,7 +341,7 @@ export default function SettingsScreen({ navigation }) {
                     d.setHours(hh, mm, 0, 0);
                     return d;
                   })()}
-                  onValueChange={(date) => {
+                  onValueChange={(event, date) => {
                     setTimePickerVisible(false);
                     if (!date) return;
                     const hh = String(date.getHours()).padStart(2, '0');

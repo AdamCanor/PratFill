@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
-import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies } from '../api/doch1';
+import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth } from '../api/doch1';
 import { colors, spacing, radius } from '../theme';
 
 export default function TestConnectionScreen({ navigation }) {
@@ -46,6 +46,26 @@ export default function TestConnectionScreen({ navigation }) {
     append('Cookies cleared.');
   };
 
+  const runReauthTest = async () => {
+    setLog([]);
+    setRunning(true);
+    try {
+      const before = await hasAppCookie();
+      append(`AppCookie present before: ${before}`);
+      append('Calling attemptSilentReauth()...');
+      const { recovered, redirected, finalUrl } = await attemptSilentReauth();
+      append(`recovered: ${recovered}`);
+      append(`redirected: ${redirected}`);
+      append(`finalUrl: ${finalUrl}`);
+      const after = await hasAppCookie();
+      append(`AppCookie present after: ${after}`);
+    } catch (err) {
+      append(`❌ Error: ${err.message}`);
+    } finally {
+      setRunning(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Test Connection</Text>
@@ -64,6 +84,10 @@ export default function TestConnectionScreen({ navigation }) {
 
       <TouchableOpacity style={styles.secondaryButton} onPress={onClearCookies}>
         <Text style={styles.secondaryButtonText}>Clear cookies</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.secondaryButton} onPress={runReauthTest} disabled={running}>
+        <Text style={styles.secondaryButtonText}>Test silent re-auth</Text>
       </TouchableOpacity>
 
       <ScrollView style={styles.logBox}>

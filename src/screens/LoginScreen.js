@@ -3,8 +3,8 @@ import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { WebView } from 'react-native-webview';
 import CookieManager from '@preeternal/react-native-cookie-manager';
 import { colors, spacing } from '../theme';
+import { LOGIN_URL } from '../api/doch1';
 
-const LOGIN_URL = 'https://one.prat.idf.il/';
 // Pages that only render once the AppCookie session is established.
 const LOGGED_IN_PATH_HINTS = ['/hp', '/secondaries', '/calendar', '/primaries'];
 

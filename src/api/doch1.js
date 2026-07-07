@@ -3,6 +3,10 @@ import CookieManager from '@preeternal/react-native-cookie-manager';
 
 const BASE_URL = 'https://one.prat.idf.il';
 const COOKIE_DOMAIN = 'https://one.prat.idf.il';
+export const LOGIN_URL = `${BASE_URL}/`;
+
+const REAUTH_TIMEOUT_MS = 10000;
+const REAUTH_COOLDOWN_MS = 20000;
 
 // --- Cookie handling -------------------------------------------------
 
@@ -24,6 +28,45 @@ export async function clearCookies() {
   await CookieManager.clearAll();
 }
 
+// The IDF portal silently re-issues AppCookie from a longer-lived session
+// cookie when the login page is reloaded (no credentials re-entered) — this
+// replicates that redirect chain headlessly so background calls can recover
+// from a stale AppCookie without a WebView.
+let reauthInFlight = null;
+let reauthCooldownUntil = 0;
+
+export async function attemptSilentReauth() {
+  if (reauthInFlight) return reauthInFlight;
+  if (Date.now() < reauthCooldownUntil) {
+    return { recovered: false };
+  }
+
+  reauthInFlight = (async () => {
+    let redirected;
+    let finalUrl;
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), REAUTH_TIMEOUT_MS);
+      const res = await fetch(LOGIN_URL, { redirect: 'follow', signal: controller.signal });
+      clearTimeout(timeout);
+      redirected = res?.redirected;
+      finalUrl = res?.url;
+    } catch (_) {
+      // Network failure or timeout — fall through to the recovery check below.
+    }
+
+    const recovered = await hasAppCookie();
+    reauthCooldownUntil = recovered ? 0 : Date.now() + REAUTH_COOLDOWN_MS;
+    return { recovered, redirected, finalUrl };
+  })();
+
+  try {
+    return await reauthInFlight;
+  } finally {
+    reauthInFlight = null;
+  }
+}
+
 // --- Generic request helper ------------------------------------------
 
 export class AuthError extends Error {
@@ -34,35 +77,39 @@ export class AuthError extends Error {
 }
 
 async function request(path, { method = 'GET', headers = {}, body } = {}) {
-  const cookieHeader = await getStoredCookieHeader();
-  if (!cookieHeader.includes('AppCookie=')) {
-    throw new AuthError('Missing AppCookie - login required');
-  }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const cookieHeader = await getStoredCookieHeader();
+    if (!cookieHeader.includes('AppCookie=')) {
+      if (attempt === 0 && (await attemptSilentReauth()).recovered) continue;
+      throw new AuthError('Missing AppCookie - login required');
+    }
 
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers: {
-      accept: 'application/json, text/plain, */*',
-      cookie: cookieHeader,
-      ...headers,
-    },
-    body,
-  });
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method,
+      headers: {
+        accept: 'application/json, text/plain, */*',
+        cookie: cookieHeader,
+        ...headers,
+      },
+      body,
+    });
 
-  if (res.status === 401 || res.status === 403) {
-    throw new AuthError(`Auth failed (${res.status}) - login required`);
-  }
+    if (res.status === 401 || res.status === 403) {
+      if (attempt === 0 && (await attemptSilentReauth()).recovered) continue;
+      throw new AuthError(`Auth failed (${res.status}) - login required`);
+    }
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Request failed (${res.status}): ${text}`);
-  }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Request failed (${res.status}): ${text}`);
+    }
 
-  const contentType = res.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    return res.json();
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      return res.json();
+    }
+    return res.text();
   }
-  return res.text();
 }
 
 

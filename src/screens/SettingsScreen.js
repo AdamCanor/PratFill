@@ -418,6 +418,18 @@ export default function SettingsScreen({ navigation }) {
             onDismiss={() => setShowUpdateModal(false)}
           />
 
+          <TouchableOpacity
+            style={styles.updateRow}
+            onPress={() => navigation.navigate('TestConnection')}
+            activeOpacity={0.7}
+          >
+            <View style={{ flex: 1, marginEnd: spacing.sm }}>
+              <Text style={styles.toggleLabel}>בדיקת חיבור</Text>
+              <Text style={styles.toggleMeta}>כלי אבחון להתחברות ולדיווח האוטומטי</Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-left" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+
           <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>צבע ראשי</Text>
           <View style={styles.swatchRow}>
             {ACCENT_PRESETS.map((preset, i) => {

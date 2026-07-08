@@ -34,11 +34,21 @@ export async function clearCookies() {
 // from a stale AppCookie without a WebView.
 let reauthInFlight = null;
 let reauthCooldownUntil = 0;
+let lastReauthAttempt = null;
+
+// Exposed purely for debugging (TestConnectionScreen): lets us tell "reauth
+// was attempted and failed" apart from "skipped, still on cooldown" — those
+// look identical from the outside otherwise.
+export function getLastReauthAttempt() {
+  return lastReauthAttempt;
+}
 
 export async function attemptSilentReauth() {
   if (reauthInFlight) return reauthInFlight;
   if (Date.now() < reauthCooldownUntil) {
-    return { recovered: false };
+    const result = { recovered: false, skipped: 'cooldown' };
+    lastReauthAttempt = { ...result, at: new Date().toISOString() };
+    return result;
   }
 
   reauthInFlight = (async () => {
@@ -66,7 +76,9 @@ export async function attemptSilentReauth() {
 
     const recovered = await hasAppCookie();
     reauthCooldownUntil = recovered ? 0 : Date.now() + REAUTH_COOLDOWN_MS;
-    return { recovered, redirected, finalUrl };
+    const result = { recovered, redirected, finalUrl };
+    lastReauthAttempt = { ...result, at: new Date().toISOString() };
+    return result;
   })();
 
   try {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import CookieManager from '@preeternal/react-native-cookie-manager';
-import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, COOKIE_DOMAIN } from '../api/doch1';
+import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, getLastReauthAttempt, COOKIE_DOMAIN } from '../api/doch1';
 import { colors, spacing, radius } from '../theme';
 
 export default function TestConnectionScreen({ navigation }) {
@@ -38,6 +38,7 @@ export default function TestConnectionScreen({ navigation }) {
         append(`❌ Error: ${err.message}`);
       }
     } finally {
+      append(`Last reauth attempt (may be from this run or an earlier one): ${JSON.stringify(getLastReauthAttempt())}`);
       setRunning(false);
     }
   };
@@ -76,7 +77,8 @@ export default function TestConnectionScreen({ navigation }) {
       const before = await hasAppCookie();
       append(`AppCookie present before: ${before}`);
       append('Calling attemptSilentReauth()...');
-      const { recovered, redirected, finalUrl } = await attemptSilentReauth();
+      const { recovered, redirected, finalUrl, skipped } = await attemptSilentReauth();
+      if (skipped) append(`skipped: ${skipped} (still on cooldown from a previous failed attempt)`);
       append(`recovered: ${recovered}`);
       append(`redirected: ${redirected}`);
       append(`finalUrl: ${finalUrl}`);

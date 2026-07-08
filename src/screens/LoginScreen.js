@@ -3,8 +3,8 @@ import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { WebView } from 'react-native-webview';
 import CookieManager from '@preeternal/react-native-cookie-manager';
 import { colors, spacing } from '../theme';
+import { LOGIN_URL, COOKIE_DOMAIN } from '../api/doch1';
 
-const LOGIN_URL = 'https://one.prat.idf.il/';
 // Pages that only render once the AppCookie session is established.
 const LOGGED_IN_PATH_HINTS = ['/hp', '/secondaries', '/calendar', '/primaries'];
 
@@ -17,7 +17,7 @@ export default function LoginScreen({ navigation }) {
     if (checking) return;
     setChecking(true);
     try {
-      const cookies = await CookieManager.get('https://one.prat.idf.il');
+      const cookies = await CookieManager.get(COOKIE_DOMAIN);
       if (cookies && cookies.AppCookie && cookies.AppCookie.value) {
         setStatus('התחברות הצליחה');
         navigation.replace('Home');

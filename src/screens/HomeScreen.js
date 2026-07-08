@@ -67,6 +67,20 @@ function describeReport(report) {
   return sec ? sec.statusDescription : `${mainCode}/${secCode}`;
 }
 
+function buildLocalReport(apiDate, mainCode, secondaryCode, note, statuses) {
+  const [dd, mm, yyyy] = apiDate.split('.');
+  const isoDate = `${yyyy}-${mm}-${dd}T00:00:00`;
+  const statusEntry = statuses.find((s) => s.statusCode === mainCode);
+  const secEntry = statusEntry?.secondaries?.find((s) => s.statusCode === secondaryCode);
+  return {
+    date: isoDate,
+    reportedStatusCode: `${mainCode}${secondaryCode}`,
+    secondaryStatusReported: secEntry?.statusDescription || null,
+    reportedMainName: statusEntry?.statusDescription || null,
+    note: note || '',
+  };
+}
+
 const DEFAULT_QUICK_BUTTONS = [
   { label: 'בסיס', mainCode: '01', secondaryCode: '01' },
   { label: 'אחרי תורנות / משמרת', mainCode: '02', secondaryCode: '09' },
@@ -378,6 +392,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
 
       if (alreadyMatches) {
         await deleteFutureReport(apiDate);
+        setReports((prev) => prev.filter((r) => normalizeDate(r) !== apiDate));
       } else {
         if (existing) await deleteFutureReport(apiDate);
         await insertFutureReport({
@@ -385,8 +400,11 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           secondaryCode: option.secondaryCode,
           date: apiDate,
         });
+        setReports((prev) => [
+          ...prev.filter((r) => normalizeDate(r) !== apiDate),
+          buildLocalReport(apiDate, option.mainCode, option.secondaryCode, '', statuses),
+        ]);
       }
-      await refresh();
     } catch (err) {
       if (err instanceof AuthError) {
         navigation.replace('Login');
@@ -428,7 +446,10 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
         note: noteToSend,
         date: modalDate,
       });
-      await refresh();
+      setReports((prev) => [
+        ...prev.filter((r) => normalizeDate(r) !== modalDate),
+        buildLocalReport(modalDate, modalMain, secondaryCode, noteToSend, statuses),
+      ]);
     } catch (err) {
       if (err instanceof AuthError) {
         navigation.replace('Login');

@@ -6,6 +6,10 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import SettingsPresetsScreen from '../screens/SettingsPresetsScreen';
+import SettingsQuickButtonsScreen from '../screens/SettingsQuickButtonsScreen';
+import SettingsAutoSubmitScreen from '../screens/SettingsAutoSubmitScreen';
+import SettingsGeneralScreen from '../screens/SettingsGeneralScreen';
 import TestConnectionScreen from '../screens/TestConnectionScreen';
 import { getUser, refreshStatuses } from '../api/doch1';
 import { colors } from '../theme';
@@ -72,6 +76,26 @@ export default function RootNavigator() {
           name="Settings"
           component={SettingsScreen}
           options={{ title: 'הגדרות' }}
+        />
+        <Stack.Screen
+          name="SettingsPresets"
+          component={SettingsPresetsScreen}
+          options={{ title: 'תבניות שבועיות' }}
+        />
+        <Stack.Screen
+          name="SettingsQuickButtons"
+          component={SettingsQuickButtonsScreen}
+          options={{ title: 'כפתורים מהירים' }}
+        />
+        <Stack.Screen
+          name="SettingsAutoSubmit"
+          component={SettingsAutoSubmitScreen}
+          options={{ title: 'דיווח אוטומטי' }}
+        />
+        <Stack.Screen
+          name="SettingsGeneral"
+          component={SettingsGeneralScreen}
+          options={{ title: 'כללי ומראה' }}
         />
         <Stack.Screen
           name="TestConnection"

@@ -6,8 +6,8 @@
 
 # PratFill
 
-### דוח 10, בלי לפתוח דפדפן
-מילוי דיווחי נוכחות עתידיים מול מערכת One.Prat של צה"ל — ישירות מהטלפון.
+### דוח 1, בלי לפתוח דבר
+מילוי דיווחי נוכחות עתידיים מול מערכת דוח 1 של צה"ל — באופן אוטומטי.
 
 [![release](https://img.shields.io/github/v/release/AdamCanor/PratFill?labelColor=27303D&color=0877d2)](https://github.com/AdamCanor/PratFill/releases)
 [![license](https://img.shields.io/github/license/AdamCanor/PratFill?labelColor=27303D&color=946300)](/LICENSE)

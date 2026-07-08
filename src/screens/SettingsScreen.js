@@ -21,8 +21,6 @@ import UpdateModal from '../components/UpdateModal';
 import { checkForUpdate } from '../utils/updates';
 import { runAutoSubmit, getLastAutoSubmitRun } from '../tasks/runAutoSubmit';
 
-import DateTimePicker from '@react-native-community/datetimepicker';
-
 I18nManager.forceRTL(true);
 
 const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
@@ -64,9 +62,8 @@ export default function SettingsScreen({ navigation }) {
   const styles = React.useMemo(() => makeStyles(accentColor, accentTextColor), [accentColor, accentTextColor]);
 
   const [commanderMode, setCommanderMode] = useState(false);
-  const [autoSubmit, setAutoSubmit] = useState({ enabled: false, presetId: '', time: '09:00' });
+  const [autoSubmit, setAutoSubmit] = useState({ enabled: false, presetId: '' });
   const [autoPresetModalVisible, setAutoPresetModalVisible] = useState(false);
-  const [timePickerVisible, setTimePickerVisible] = useState(false);
   const [runningNow, setRunningNow] = useState(false);
   const [lastRun, setLastRun] = useState(null);
 
@@ -303,19 +300,6 @@ export default function SettingsScreen({ navigation }) {
                 <MaterialCommunityIcons name="chevron-left" size={18} color={colors.textMuted} />
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.quickBtnRow}
-                onPress={() => setTimePickerVisible(true)}
-                activeOpacity={0.7}
-              >
-                <View style={{ flex: 1, marginEnd: spacing.sm }}>
-                  <Text style={styles.toggleLabel}>שעת דיווח</Text>
-                  <Text style={styles.toggleMeta}>הדיווח רץ ברקע — ייתכן פער של מספר שעות מהשעה שנבחרה, בהתאם למערכת ההפעלה</Text>
-                </View>
-                <View style={styles.timeChip}>
-                  <Text style={styles.timeChipText}>{autoSubmit.time}</Text>
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity
                 style={styles.updateRow}
                 onPress={handleRunNow}
                 disabled={runningNow}
@@ -331,28 +315,6 @@ export default function SettingsScreen({ navigation }) {
                   <MaterialCommunityIcons name="play-circle-outline" size={24} color={accentColor} />
                 )}
               </TouchableOpacity>
-              {timePickerVisible && (
-                <DateTimePicker
-                  mode="time"
-                  display="spinner"
-                  value={(() => {
-                    const [hh, mm] = (autoSubmit.time || '09:00').split(':').map(Number);
-                    const d = new Date();
-                    d.setHours(hh, mm, 0, 0);
-                    return d;
-                  })()}
-                  onValueChange={(event, date) => {
-                    setTimePickerVisible(false);
-                    if (!date) return;
-                    const hh = String(date.getHours()).padStart(2, '0');
-                    const mm = String(date.getMinutes()).padStart(2, '0');
-                    setAutoSubmit((a) => ({ ...a, time: `${hh}:${mm}` }));
-                  }}
-                  onDismiss={() => setTimePickerVisible(false)}
-                  is24Hour
-                />
-              )}
-
             </>
           )}
 
@@ -850,23 +812,6 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 2,
-  },
-
-
-  timeChip: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    minWidth: 72,
-    alignItems: 'center',
-    backgroundColor: colors.card,
-  },
-  timeChipText: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
   },
 
   // accent color swatches

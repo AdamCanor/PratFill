@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
-import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies } from '../api/doch1';
+import CookieManager from '@preeternal/react-native-cookie-manager';
+import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, getLastReauthAttempt, COOKIE_DOMAIN } from '../api/doch1';
 import { colors, spacing, radius } from '../theme';
 
 export default function TestConnectionScreen({ navigation }) {
@@ -37,6 +38,7 @@ export default function TestConnectionScreen({ navigation }) {
         append(`❌ Error: ${err.message}`);
       }
     } finally {
+      append(`Last reauth attempt (may be from this run or an earlier one): ${JSON.stringify(getLastReauthAttempt())}`);
       setRunning(false);
     }
   };
@@ -44,6 +46,49 @@ export default function TestConnectionScreen({ navigation }) {
   const onClearCookies = async () => {
     await clearCookies();
     append('Cookies cleared.');
+  };
+
+  const onInvalidateAppCookie = async () => {
+    setLog([]);
+    try {
+      // Not using `expires` in the past here: this library only writes an
+      // Expires attribute when the computed maxAge > 0, so a past date is
+      // silently dropped and nothing actually expires. Overwriting the
+      // value instead reliably breaks the session server-side without
+      // touching any other cookie.
+      await CookieManager.set(COOKIE_DOMAIN, {
+        name: 'AppCookie',
+        value: 'invalidated-for-testing',
+      });
+      await CookieManager.flush?.();
+      append('AppCookie value overwritten — other cookies untouched.');
+      append(`AppCookie present (still, expected): ${await hasAppCookie()}`);
+      append('Now tap "Run test" — it should transparently recover via');
+      append('attemptSilentReauth() instead of showing an AuthError.');
+    } catch (err) {
+      append(`❌ Error: ${err.message}`);
+    }
+  };
+
+  const runReauthTest = async () => {
+    setLog([]);
+    setRunning(true);
+    try {
+      const before = await hasAppCookie();
+      append(`AppCookie present before: ${before}`);
+      append('Calling attemptSilentReauth()...');
+      const { recovered, redirected, finalUrl, skipped } = await attemptSilentReauth();
+      if (skipped) append(`skipped: ${skipped} (still on cooldown from a previous failed attempt)`);
+      append(`recovered: ${recovered}`);
+      append(`redirected: ${redirected}`);
+      append(`finalUrl: ${finalUrl}`);
+      const after = await hasAppCookie();
+      append(`AppCookie present after: ${after}`);
+    } catch (err) {
+      append(`❌ Error: ${err.message}`);
+    } finally {
+      setRunning(false);
+    }
   };
 
   return (
@@ -64,6 +109,14 @@ export default function TestConnectionScreen({ navigation }) {
 
       <TouchableOpacity style={styles.secondaryButton} onPress={onClearCookies}>
         <Text style={styles.secondaryButtonText}>Clear cookies</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.secondaryButton} onPress={onInvalidateAppCookie}>
+        <Text style={styles.secondaryButtonText}>Invalidate AppCookie only</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.secondaryButton} onPress={runReauthTest} disabled={running}>
+        <Text style={styles.secondaryButtonText}>Test silent re-auth</Text>
       </TouchableOpacity>
 
       <ScrollView style={styles.logBox}>

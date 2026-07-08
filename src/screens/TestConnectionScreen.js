@@ -47,17 +47,23 @@ export default function TestConnectionScreen({ navigation }) {
     append('Cookies cleared.');
   };
 
-  const onDeleteAppCookieOnly = async () => {
+  const onInvalidateAppCookie = async () => {
     setLog([]);
     try {
+      // Not using `expires` in the past here: this library only writes an
+      // Expires attribute when the computed maxAge > 0, so a past date is
+      // silently dropped and nothing actually expires. Overwriting the
+      // value instead reliably breaks the session server-side without
+      // touching any other cookie.
       await CookieManager.set(COOKIE_DOMAIN, {
         name: 'AppCookie',
-        value: '',
-        expires: '1970-01-01T00:00:00.000Z',
+        value: 'invalidated-for-testing',
       });
       await CookieManager.flush?.();
-      append('AppCookie expired — other cookies untouched.');
-      append(`AppCookie present now: ${await hasAppCookie()}`);
+      append('AppCookie value overwritten — other cookies untouched.');
+      append(`AppCookie present (still, expected): ${await hasAppCookie()}`);
+      append('Now tap "Run test" — it should transparently recover via');
+      append('attemptSilentReauth() instead of showing an AuthError.');
     } catch (err) {
       append(`❌ Error: ${err.message}`);
     }
@@ -103,8 +109,8 @@ export default function TestConnectionScreen({ navigation }) {
         <Text style={styles.secondaryButtonText}>Clear cookies</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.secondaryButton} onPress={onDeleteAppCookieOnly}>
-        <Text style={styles.secondaryButtonText}>Delete AppCookie only</Text>
+      <TouchableOpacity style={styles.secondaryButton} onPress={onInvalidateAppCookie}>
+        <Text style={styles.secondaryButtonText}>Invalidate AppCookie only</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.secondaryButton} onPress={runReauthTest} disabled={running}>

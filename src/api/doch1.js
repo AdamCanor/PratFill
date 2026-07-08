@@ -55,6 +55,15 @@ export async function attemptSilentReauth() {
       // Network failure or timeout — fall through to the recovery check below.
     }
 
+    // flush() forces the native cookie store to sync before we read it back —
+    // without this, hasAppCookie() can return a stale read right after the
+    // fetch above just updated the jar.
+    try {
+      await CookieManager.flush?.();
+    } catch (_) {
+      // Not available on this platform — proceed with whatever get() returns.
+    }
+
     const recovered = await hasAppCookie();
     reauthCooldownUntil = recovered ? 0 : Date.now() + REAUTH_COOLDOWN_MS;
     return { recovered, redirected, finalUrl };

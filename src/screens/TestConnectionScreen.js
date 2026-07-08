@@ -55,6 +55,7 @@ export default function TestConnectionScreen({ navigation }) {
         value: '',
         expires: '1970-01-01T00:00:00.000Z',
       });
+      await CookieManager.flush?.();
       append('AppCookie expired — other cookies untouched.');
       append(`AppCookie present now: ${await hasAppCookie()}`);
     } catch (err) {

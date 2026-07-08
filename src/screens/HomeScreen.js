@@ -654,7 +654,9 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
 
           {/* Day list */}
           {loading ? (
-            <ActivityIndicator color={accentColor} style={{ marginTop: spacing.lg }} />
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <ActivityIndicator color={accentColor} />
+            </View>
           ) : (
             <FlatList
               data={upcoming}

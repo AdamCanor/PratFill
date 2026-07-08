@@ -11,8 +11,8 @@ import {
   Switch,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { getSettings, saveSettings, getLastAutoSubmitRun } from '../api/doch1';
-import { runAutoSubmit } from '../tasks/runAutoSubmit';
+import { getSettings, saveSettings } from '../api/doch1';
+import { runAutoSubmit, getLastAutoSubmitRun } from '../tasks/runAutoSubmit';
 import { colors, spacing, radius } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
-import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth } from '../api/doch1';
+import CookieManager from '@preeternal/react-native-cookie-manager';
+import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, COOKIE_DOMAIN } from '../api/doch1';
 import { colors, spacing, radius } from '../theme';
 
 export default function TestConnectionScreen({ navigation }) {
@@ -46,6 +47,21 @@ export default function TestConnectionScreen({ navigation }) {
     append('Cookies cleared.');
   };
 
+  const onDeleteAppCookieOnly = async () => {
+    setLog([]);
+    try {
+      await CookieManager.set(COOKIE_DOMAIN, {
+        name: 'AppCookie',
+        value: '',
+        expires: '1970-01-01T00:00:00.000Z',
+      });
+      append('AppCookie expired — other cookies untouched.');
+      append(`AppCookie present now: ${await hasAppCookie()}`);
+    } catch (err) {
+      append(`❌ Error: ${err.message}`);
+    }
+  };
+
   const runReauthTest = async () => {
     setLog([]);
     setRunning(true);
@@ -84,6 +100,10 @@ export default function TestConnectionScreen({ navigation }) {
 
       <TouchableOpacity style={styles.secondaryButton} onPress={onClearCookies}>
         <Text style={styles.secondaryButtonText}>Clear cookies</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.secondaryButton} onPress={onDeleteAppCookieOnly}>
+        <Text style={styles.secondaryButtonText}>Delete AppCookie only</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.secondaryButton} onPress={runReauthTest} disabled={running}>

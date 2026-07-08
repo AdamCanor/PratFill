@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import CookieManager from '@preeternal/react-native-cookie-manager';
 
 const BASE_URL = 'https://one.prat.idf.il';
-const COOKIE_DOMAIN = 'https://one.prat.idf.il';
+export const COOKIE_DOMAIN = 'https://one.prat.idf.il';
 export const LOGIN_URL = `${BASE_URL}/`;
 
 const REAUTH_TIMEOUT_MS = 10000;

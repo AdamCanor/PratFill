@@ -12,26 +12,10 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getSettings, saveSettings } from '../api/doch1';
-import { runAutoSubmit, getLastAutoSubmitRun } from '../tasks/runAutoSubmit';
 import { colors, spacing, radius } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 
 I18nManager.forceRTL(true);
-
-function describeLastRun(lastRun) {
-  if (!lastRun) return 'טרם בוצעה הרצה';
-  const time = new Date(lastRun.at).toLocaleString('he-IL', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-  if (lastRun.error === 'auth') return `${time} — נדרשת התחברות מחדש`;
-  if (lastRun.error) return `${time} — שגיאה`;
-  if (lastRun.skipped) return `${time} — לא בוצעה פעולה (${lastRun.reason})`;
-  if (lastRun.count > 0) return `${time} — נוספו דיווחים ל-${lastRun.count} ימים`;
-  return `${time} — כל הימים כבר מדווחים`;
-}
 
 export default function SettingsAutoSubmitScreen({ navigation }) {
   const { accentColor, accentTextColor } = useTheme();
@@ -40,8 +24,6 @@ export default function SettingsAutoSubmitScreen({ navigation }) {
   const [autoSubmit, setAutoSubmit] = useState({ enabled: false, presetId: '' });
   const [presets, setPresets] = useState([]);
   const [presetModalVisible, setPresetModalVisible] = useState(false);
-  const [runningNow, setRunningNow] = useState(false);
-  const [lastRun, setLastRun] = useState(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -49,22 +31,8 @@ export default function SettingsAutoSubmitScreen({ navigation }) {
       const s = await getSettings();
       if (s?.autoSubmit) setAutoSubmit(s.autoSubmit);
       if (s?.weeklyPresets) setPresets(s.weeklyPresets);
-      setLastRun(await getLastAutoSubmitRun());
     })();
   }, []);
-
-  const handleRunNow = async () => {
-    setRunningNow(true);
-    try {
-      const current = await getSettings();
-      await saveSettings({ ...current, autoSubmit });
-      await runAutoSubmit();
-    } catch {
-    } finally {
-      setLastRun(await getLastAutoSubmitRun());
-      setRunningNow(false);
-    }
-  };
 
   const onSave = async () => {
     setSaving(true);
@@ -108,22 +76,6 @@ export default function SettingsAutoSubmitScreen({ navigation }) {
               <MaterialCommunityIcons name="chevron-left" size={18} color={colors.textMuted} />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.row}
-              onPress={handleRunNow}
-              disabled={runningNow}
-              activeOpacity={0.7}
-            >
-              <View style={{ flex: 1, marginEnd: spacing.sm }}>
-                <Text style={styles.rowLabel}>הרץ עכשיו</Text>
-                <Text style={styles.rowMeta}>{describeLastRun(lastRun)}</Text>
-              </View>
-              {runningNow ? (
-                <ActivityIndicator size="small" color={accentColor} />
-              ) : (
-                <MaterialCommunityIcons name="play-circle-outline" size={24} color={accentColor} />
-              )}
-            </TouchableOpacity>
           </>
         )}
       </ScrollView>

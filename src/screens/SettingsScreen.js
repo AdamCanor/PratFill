@@ -94,6 +94,12 @@ export default function SettingsScreen({ navigation }) {
           meta={summary.commanderMode ? 'מצב מפקד פעיל' : null}
           onPress={() => navigation.navigate('SettingsGeneral')}
         />
+        <NavRow
+          icon="wrench-outline"
+          label="כלי פיתוח"
+          meta="בדיקת חיבור, הרצה ידנית"
+          onPress={() => navigation.navigate('SettingsDev')}
+        />
       </ScrollView>
     </View>
   );

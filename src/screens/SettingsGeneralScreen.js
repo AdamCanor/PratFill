@@ -101,7 +101,7 @@ export default function SettingsGeneralScreen({ navigation }) {
           })}
         </View>
 
-        <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>כלים</Text>
+        <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>עדכונים</Text>
         <TouchableOpacity style={styles.row} onPress={handleCheckUpdate} activeOpacity={0.7}>
           <View style={{ flex: 1, marginEnd: spacing.sm }}>
             <Text style={styles.rowLabel}>בדוק עדכונים</Text>
@@ -118,14 +118,6 @@ export default function SettingsGeneralScreen({ navigation }) {
               color={updateError ? colors.danger : upToDate ? colors.success : accentColor}
             />
           )}
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('TestConnection')} activeOpacity={0.7}>
-          <View style={{ flex: 1, marginEnd: spacing.sm }}>
-            <Text style={styles.rowLabel}>בדיקת חיבור</Text>
-            <Text style={styles.rowMeta}>כלי אבחון להתחברות ולדיווח האוטומטי</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-left" size={18} color={colors.textMuted} />
         </TouchableOpacity>
 
         <UpdateModal

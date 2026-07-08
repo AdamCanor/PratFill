@@ -10,6 +10,7 @@ import SettingsPresetsScreen from '../screens/SettingsPresetsScreen';
 import SettingsQuickButtonsScreen from '../screens/SettingsQuickButtonsScreen';
 import SettingsAutoSubmitScreen from '../screens/SettingsAutoSubmitScreen';
 import SettingsGeneralScreen from '../screens/SettingsGeneralScreen';
+import SettingsDevScreen from '../screens/SettingsDevScreen';
 import TestConnectionScreen from '../screens/TestConnectionScreen';
 import { getUser, refreshStatuses } from '../api/doch1';
 import { colors } from '../theme';
@@ -96,6 +97,11 @@ export default function RootNavigator() {
           name="SettingsGeneral"
           component={SettingsGeneralScreen}
           options={{ title: 'כללי ומראה' }}
+        />
+        <Stack.Screen
+          name="SettingsDev"
+          component={SettingsDevScreen}
+          options={{ title: 'כלי פיתוח' }}
         />
         <Stack.Screen
           name="TestConnection"

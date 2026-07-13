@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import CookieManager from '@preeternal/react-native-cookie-manager';
 import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, getLastReauthAttempt, COOKIE_DOMAIN } from '../api/doch1';
+import { getLastAutoSubmitRun } from '../tasks/runAutoSubmit';
 import { colors, spacing, radius } from '../theme';
 
 export default function TestConnectionScreen({ navigation }) {
@@ -70,6 +71,16 @@ export default function TestConnectionScreen({ navigation }) {
     }
   };
 
+  const showLastAutoSubmitRun = async () => {
+    setLog([]);
+    const lastRun = await getLastAutoSubmitRun();
+    if (!lastRun) {
+      append('No auto-submit run recorded yet.');
+      return;
+    }
+    append(JSON.stringify(lastRun, null, 2));
+  };
+
   const runReauthTest = async () => {
     setLog([]);
     setRunning(true);
@@ -117,6 +128,10 @@ export default function TestConnectionScreen({ navigation }) {
 
       <TouchableOpacity style={styles.secondaryButton} onPress={runReauthTest} disabled={running}>
         <Text style={styles.secondaryButtonText}>Test silent re-auth</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.secondaryButton} onPress={showLastAutoSubmitRun} disabled={running}>
+        <Text style={styles.secondaryButtonText}>Show last auto-submit run</Text>
       </TouchableOpacity>
 
       <ScrollView style={styles.logBox}>

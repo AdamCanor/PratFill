@@ -5,8 +5,13 @@ const BASE_URL = 'https://one.prat.idf.il';
 export const COOKIE_DOMAIN = 'https://one.prat.idf.il';
 export const LOGIN_URL = `${BASE_URL}/`;
 
-const REAUTH_TIMEOUT_MS = 10000;
+// A cold OS-triggered background wake has no warm DNS cache, TLS session, or
+// connection pool — the same redirect chain that finishes comfortably from a
+// foreground app can take much longer on a cold network stack. Give it more
+// room than a foreground call would ever need.
+const REAUTH_TIMEOUT_MS = 25000;
 const REAUTH_COOLDOWN_MS = 20000;
+const REAUTH_NETWORK_RETRIES = 1;
 
 // --- Cookie handling -------------------------------------------------
 
@@ -54,15 +59,23 @@ export async function attemptSilentReauth() {
   reauthInFlight = (async () => {
     let redirected;
     let finalUrl;
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), REAUTH_TIMEOUT_MS);
-      const res = await fetch(LOGIN_URL, { redirect: 'follow', signal: controller.signal });
-      clearTimeout(timeout);
-      redirected = res?.redirected;
-      finalUrl = res?.url;
-    } catch (_) {
-      // Network failure or timeout — fall through to the recovery check below.
+    // Only retry when the fetch itself never completed (network failure or
+    // our own abort timeout) — a real response with no fresh AppCookie is a
+    // genuine negative, not a timing artifact, so retrying that would just
+    // waste the background task's time budget for nothing.
+    for (let attempt = 0; attempt <= REAUTH_NETWORK_RETRIES; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), REAUTH_TIMEOUT_MS);
+        const res = await fetch(LOGIN_URL, { redirect: 'follow', signal: controller.signal });
+        clearTimeout(timeout);
+        redirected = res?.redirected;
+        finalUrl = res?.url;
+        break;
+      } catch (_) {
+        // Network failure or timeout — loop again if a retry remains, else
+        // fall through to the recovery check below.
+      }
     }
 
     // flush() forces the native cookie store to sync before we read it back —

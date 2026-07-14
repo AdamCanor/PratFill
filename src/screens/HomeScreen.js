@@ -726,7 +726,10 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
                 <TouchableOpacity
                   key={s.statusCode}
                   style={styles.modalOption}
-                  onPress={() => setModalMain(s.statusCode)}
+                  onPress={() => {
+                    setModalMain(s.statusCode);
+                    setModalSelectedSecondary(s.secondaries?.length === 1 ? s.secondaries[0].statusCode : null);
+                  }}
                 >
                   <Text style={styles.modalOptionText}>{s.statusDescription}</Text>
                 </TouchableOpacity>

@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 @AGENTS.md
 
 ## Project summary
-React Native / Expo app (SDK 56) for IDF soldiers to submit future attendance reports ("דוח 10") via the One.Prat API (`https://one.prat.idf.il`).
+React Native / Expo app (SDK 56) for IDF soldiers to submit future attendance reports ("דו"ח 10") via the One.Prat API (`https://one.prat.idf.il`).
 
 ## Commands
 

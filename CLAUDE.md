@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 @AGENTS.md
 
 ## Project summary
-React Native / Expo app (SDK 56) for IDF soldiers to submit future attendance reports ("דוח 10") via the One.Prat API (`https://one.prat.idf.il`).
+React Native / Expo app (SDK 56) for IDF soldiers to submit future attendance reports ("דו"ח 10") via the One.Prat API (`https://one.prat.idf.il`).
 
 ## Commands
 
@@ -83,8 +83,8 @@ Pure JS changes do not require a prebuild.
 - **Release:** merge `dev` → `main` via PR. On `main` push, `release.yml` builds a production APK and publishes a GitHub Release tagged `v{version}-{sha}`.
 - **GitHub Actions workflows (all in `.github/workflows/`):**
   - `release.yml` — auto on `main` push; builds release APK, creates GitHub Release
-  - `build-apk.yml` — manual dispatch only; builds release APK, uploads as artifact (useful for testing release builds without merging to main)
-  - `build-dev-client.yml` — manual dispatch only; builds debug APK, uploads as artifact
+  - `build-apk-release.yml` — manual dispatch only; builds release APK, uploads as artifact (useful for testing release builds without merging to main)
+  - `build-apk-debug.yml` — manual dispatch only; builds debug APK, uploads as artifact
 - Merge PRs via `mcp__github__merge_pull_request` (owner: `AdamCanor`, repo: `PratFill`).
 
 ## Cookie library

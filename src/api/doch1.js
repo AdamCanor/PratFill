@@ -15,13 +15,17 @@ const REAUTH_NETWORK_RETRIES = 1;
 
 // --- Cookie handling -------------------------------------------------
 
-export async function getStoredCookieHeader() {
-  const cookies = await CookieManager.get(COOKIE_DOMAIN);
-  // Build a Cookie header from whatever cookies are present for the domain.
-  // AppCookie is the important one, but send everything that's there.
+// Build a Cookie header from whatever cookies are present for the domain.
+// AppCookie is the important one, but send everything that's there.
+function buildCookieHeader(cookies) {
   return Object.entries(cookies || {})
     .map(([name, c]) => `${name}=${c.value}`)
     .join('; ');
+}
+
+export async function getStoredCookieHeader() {
+  const cookies = await CookieManager.get(COOKIE_DOMAIN);
+  return buildCookieHeader(cookies);
 }
 
 export async function hasAppCookie() {
@@ -57,6 +61,15 @@ export async function attemptSilentReauth() {
   }
 
   reauthInFlight = (async () => {
+    const cookiesBefore = await CookieManager.get(COOKIE_DOMAIN);
+    const appCookieBefore = cookiesBefore?.AppCookie?.value;
+    // fetch() does NOT automatically attach the native CookieManager jar —
+    // every other call in this file builds a Cookie header explicitly for
+    // the same reason. Without it, this request hits the portal as a fully
+    // anonymous client, which can never be silently re-authenticated: there's
+    // no session for the server to recognize.
+    const cookieHeader = buildCookieHeader(cookiesBefore);
+
     let redirected;
     let finalUrl;
     // Only retry when the fetch itself never completed (network failure or
@@ -67,7 +80,11 @@ export async function attemptSilentReauth() {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), REAUTH_TIMEOUT_MS);
-        const res = await fetch(LOGIN_URL, { redirect: 'follow', signal: controller.signal });
+        const res = await fetch(LOGIN_URL, {
+          redirect: 'follow',
+          signal: controller.signal,
+          headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+        });
         clearTimeout(timeout);
         redirected = res?.redirected;
         finalUrl = res?.url;
@@ -79,15 +96,23 @@ export async function attemptSilentReauth() {
     }
 
     // flush() forces the native cookie store to sync before we read it back —
-    // without this, hasAppCookie() can return a stale read right after the
-    // fetch above just updated the jar.
+    // without this, a fresh AppCookie the fetch above just wrote can read
+    // back stale.
     try {
       await CookieManager.flush?.();
     } catch (_) {
       // Not available on this platform — proceed with whatever get() returns.
     }
 
-    const recovered = await hasAppCookie();
+    // A stale, already-invalid AppCookie is never cleared by the server on a
+    // plain page load, so "is AppCookie present" can't tell "still there,
+    // unchanged" apart from "freshly reissued" — that false positive was the
+    // actual bug: request() would see recovered:true, retry once, and fail
+    // again for real with the same dead cookie. Recovery only counts if we
+    // got back a genuinely different value.
+    const cookiesAfter = await CookieManager.get(COOKIE_DOMAIN);
+    const appCookieAfter = cookiesAfter?.AppCookie?.value;
+    const recovered = Boolean(appCookieAfter) && appCookieAfter !== appCookieBefore;
     reauthCooldownUntil = recovered ? 0 : Date.now() + REAUTH_COOLDOWN_MS;
     const result = { recovered, redirected, finalUrl };
     lastReauthAttempt = { ...result, at: new Date().toISOString() };

@@ -16,6 +16,10 @@ try {
       return BackgroundTask.BackgroundTaskResult.Success;
     } catch (e) {
       if (e instanceof AuthError) {
+        // Per the session model documented in doch1.js, there's no silent
+        // fix for this — AppCookie is genuinely dead and only a real
+        // WebView login can issue a new one. This notification is the
+        // entire recovery path, not a stopgap while something retries.
         await Notifications.scheduleNotificationAsync({
           content: {
             title: 'PratFill — נדרשת התחברות',

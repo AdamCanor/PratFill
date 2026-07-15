@@ -37,17 +37,41 @@ export async function clearCookies() {
   await CookieManager.clearAll();
 }
 
-// The IDF portal silently re-issues AppCookie from a longer-lived session
-// cookie when the login page is reloaded (no credentials re-entered) — this
-// replicates that redirect chain headlessly so background calls can recover
-// from a stale AppCookie without a WebView.
+// --- Session model (confirmed by direct testing against the live backend,
+// not assumed) ---------------------------------------------------------
+//
+// AppCookie is the ONLY application-level auth cookie. It's a ~368-char,
+// "CfDJ"-prefixed ASP.NET Data Protection encrypted ticket, and it's
+// short-lived (observed ~5h). Every other cookie this site sets —
+// incap_ses_*, visid_incap_*, nlbi_* (Imperva Incapsula, the WAF/CDN in
+// front of the site) and BIGipServerMFT-One-Frontends (an F5 BIG-IP
+// load-balancer stickiness cookie) — is pure network infrastructure. There
+// is no second, longer-lived application session cookie for AppCookie to
+// be reissued from.
+//
+// The site's root page (/) is a static SPA shell (a bare `<div id="root">`
+// plus JS bundle references) that returns byte-identical output — 200, no
+// redirect, no Set-Cookie — regardless of AppCookie's validity. Verified
+// this with both a genuinely valid AppCookie and a deliberately corrupted
+// one (confirmed corrupted by comparing the cookie's value before/after,
+// not just checking presence — a stale AppCookie is never removed by the
+// server on a plain page load, so presence alone proves nothing): identical
+// static response either way. So there is no header, cookie, or retry that
+// makes a headless request silently recover a dead AppCookie — the
+// server-side behavior simply doesn't vary by cookie state at this
+// endpoint. The only way to get a fresh AppCookie once it's dead is a real
+// login through LoginScreen.js's WebView.
 let reauthInFlight = null;
 let reauthCooldownUntil = 0;
 let lastReauthAttempt = null;
 
-// Exposed purely for debugging (TestConnectionScreen): lets us tell "reauth
-// was attempted and failed" apart from "skipped, still on cooldown" — those
-// look identical from the outside otherwise.
+// Exposed purely for debugging (TestConnectionScreen). request() no longer
+// calls attemptSilentReauth() below — per the session model documented
+// above, it has never once succeeded against the live backend, so calling
+// it just added up to ~50s of latency to an already-unrecoverable auth
+// failure. Kept only as a manual diagnostic probe (the "Test silent
+// re-auth" button) in case this site's behavior ever changes and this
+// conclusion needs re-verifying.
 export function getLastReauthAttempt() {
   return lastReauthAttempt;
 }
@@ -135,43 +159,40 @@ export class AuthError extends Error {
   }
 }
 
+// No retry-via-reauth here — per the session model documented above, a
+// missing/rejected AppCookie is never recoverable without a real WebView
+// login, so there's nothing to gain from stalling before failing.
 async function request(path, { method = 'GET', headers = {}, body } = {}) {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const cookieHeader = await getStoredCookieHeader();
-    if (!cookieHeader.includes('AppCookie=')) {
-      if (attempt === 0 && (await attemptSilentReauth()).recovered) continue;
-      throw new AuthError('Missing AppCookie - login required');
-    }
-
-    const res = await fetch(`${BASE_URL}${path}`, {
-      method,
-      headers: {
-        accept: 'application/json, text/plain, */*',
-        cookie: cookieHeader,
-        ...headers,
-      },
-      body,
-    });
-
-    if (res.status === 401 || res.status === 403) {
-      if (attempt === 0 && (await attemptSilentReauth()).recovered) continue;
-      throw new AuthError(`Auth failed (${res.status}) - login required`);
-    }
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`Request failed (${res.status}): ${text}`);
-    }
-
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      return res.json();
-    }
-    return res.text();
+  const cookieHeader = await getStoredCookieHeader();
+  if (!cookieHeader.includes('AppCookie=')) {
+    throw new AuthError('Missing AppCookie - login required');
   }
+
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers: {
+      accept: 'application/json, text/plain, */*',
+      cookie: cookieHeader,
+      ...headers,
+    },
+    body,
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    throw new AuthError(`Auth failed (${res.status}) - login required`);
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Request failed (${res.status}): ${text}`);
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return res.json();
+  }
+  return res.text();
 }
-
-
 
 // --- Endpoints ----------------------------------------------------------
 

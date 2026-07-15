@@ -20,7 +20,7 @@ No test or lint scripts are configured.
 
 **Entry:** `index.js` → `App.js` (wraps everything in `ThemeProvider`) → `RootNavigator.js`
 
-**Auth gate in `RootNavigator.js`:** checks for `AppCookie` via `hasAppCookie()` on mount; routes to `LoginScreen` or `HomeScreen`.
+**Auth gate in `RootNavigator.js`:** calls `getUser()` (a live server check, not just local cookie presence) on mount; routes to `LoginScreen` or `HomeScreen` based on `isUserAuth`.
 
 **Login flow (`LoginScreen.js`):** Opens a WebView to the IDF portal. Monitors navigation URLs for path fragments (`/hp`, `/secondaries`, `/calendar`, `/primaries`) then calls `CookieManager.get()` to confirm `AppCookie` is set. On success, navigates to `HomeScreen`.
 
@@ -42,6 +42,8 @@ No test or lint scripts are configured.
 ## API (`src/api/doch1.js`)
 
 All calls go to `https://one.prat.idf.il`. Auth is entirely cookie-based — `AppCookie` must be present. `getStoredCookieHeader()` builds the `Cookie:` header from `CookieManager`. Any 401/403 or missing cookie throws a custom `AuthError`; screens catch this and navigate back to Login.
+
+**Session model (confirmed by direct testing, documented in full in `doch1.js`):** `AppCookie` (a ~368-char ASP.NET Data Protection ticket) is the *only* application-level auth cookie and is short-lived (~5h observed). Every other cookie the site sets (`incap_ses_*`, `visid_incap_*`, `nlbi_*`, `BIGipServerMFT-One-Frontends`) is Imperva Incapsula (WAF/CDN) or F5 BIG-IP infrastructure — not a secondary session cookie. There is no silent/headless way to refresh a dead `AppCookie`: the site's root page returns an identical static SPA shell (no redirect, no `Set-Cookie`) regardless of cookie validity. Recovery always requires a real login through `LoginScreen.js`'s WebView. `attemptSilentReauth()` in `doch1.js` still exists but is dead code from `request()`'s point of view — kept only as a manual diagnostic probe in `TestConnectionScreen`.
 
 Key endpoints:
 | Function | Method + Path |

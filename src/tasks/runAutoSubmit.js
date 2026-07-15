@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { insertFutureReport, getFutureReports, AuthError, hasAppCookie, getLastReauthAttempt } from '../api/doch1';
+import { insertFutureReport, getFutureReports, AuthError, hasAppCookie } from '../api/doch1';
 import { getUpcomingDates, monthsToQuery, normalizeDate } from '../utils/dates';
 
 export const LAST_RUN_KEY = 'doch1_auto_submit_last_run';
@@ -14,17 +14,7 @@ async function recordLastRun(result) {
   await AsyncStorage.setItem(LAST_RUN_KEY, JSON.stringify({ ...result, at: new Date().toISOString() }));
 }
 
-// Only meaningful if the reauth attempt happened during *this* run — a stale
-// result from earlier in the same JS context (e.g. a manual "Test silent
-// re-auth" tap) would otherwise be misattributed to this run's outcome.
-function reauthAttemptForThisRun(runStartedAt) {
-  const attempt = getLastReauthAttempt();
-  if (!attempt || new Date(attempt.at).getTime() < runStartedAt) return null;
-  return attempt;
-}
-
 export async function runAutoSubmit() {
-  const runStartedAt = Date.now();
   const raw = await AsyncStorage.getItem('doch1_settings');
   const settings = raw ? JSON.parse(raw) : null;
   const { enabled, presetId } = settings?.autoSubmit ?? {};
@@ -73,14 +63,13 @@ export async function runAutoSubmit() {
 
     const result = {
       count,
-      diagnostics: { appCookiePresentAtStart, reauth: reauthAttemptForThisRun(runStartedAt) },
+      diagnostics: { appCookiePresentAtStart },
     };
     await recordLastRun(result);
     return result;
   } catch (e) {
     const diagnostics = {
       appCookiePresentAtStart,
-      reauth: reauthAttemptForThisRun(runStartedAt),
       errorName: e?.name ?? null,
       errorMessage: String(e?.message ?? '').slice(0, 500),
     };

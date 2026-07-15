@@ -7,10 +7,12 @@ import { getLastAutoSubmitRun } from '../tasks/runAutoSubmit';
 import { colors, spacing, radius } from '../theme';
 
 // Injected into every top-level document the trace WebView loads (including
-// cross-domain SSO hops). Reports all fetch/XHR traffic and periodic
-// storage snapshots back over postMessage — this is the visibility a plain
-// headless fetch can never have, and it's how we find out what the SPA's JS
-// actually does to silently re-establish a session.
+// cross-domain SSO hops). Reports all fetch/XHR traffic, request/response
+// parameters for the auth-relevant calls, and periodic storage snapshots
+// back over postMessage — the visibility a plain headless fetch can never
+// have. This is how we recover the exact OAuth parameters needed to replay
+// the refresh headlessly. Secrets (tokens, refresh_token, auth codes) are
+// redacted to length-only in-page, so nothing sensitive leaves the device.
 const TRACE_INSTRUMENTATION_JS = `
 (function () {
   function send(type, payload) {
@@ -20,6 +22,31 @@ const TRACE_INSTRUMENTATION_JS = `
       window.ReactNativeWebView.postMessage(JSON.stringify(payload));
     } catch (e) {}
   }
+  var SECRET = ['refresh_token','access_token','id_token','code','client_secret','client_assertion','assertion','code_verifier'];
+  function isSecret(k) { k = String(k).toLowerCase(); for (var i = 0; i < SECRET.length; i++) { if (k === SECRET[i]) return true; } return false; }
+  // application/x-www-form-urlencoded body, secret values blanked to length.
+  function redactForm(body) {
+    try {
+      return String(body).split('&').map(function (kv) {
+        var i = kv.indexOf('='); var k = i < 0 ? kv : kv.slice(0, i); var v = i < 0 ? '' : kv.slice(i + 1);
+        if (isSecret(decodeURIComponent(k))) return k + '=[REDACTED:' + v.length + ']';
+        try { return k + '=' + decodeURIComponent(v); } catch (e) { return k + '=' + v; }
+      }).join('&');
+    } catch (e) { return '[unparseable-body]'; }
+  }
+  // JSON body, secret fields + any very long string blanked to length.
+  function redactJson(text) {
+    try {
+      var o = JSON.parse(text);
+      Object.keys(o).forEach(function (k) {
+        if (isSecret(k)) o[k] = '[REDACTED:' + String(o[k]).length + ']';
+        else if (typeof o[k] === 'string' && o[k].length > 200) o[k] = '[LONG:' + o[k].length + ']';
+      });
+      return JSON.stringify(o);
+    } catch (e) { return '[non-JSON len=' + (text ? text.length : 0) + ']'; }
+  }
+  function wantResBody(url) { return /oauth2\\/v2\\.0\\/token|GetParams/i.test(url); }
+  function wantReqDetail(url) { return /oauth2\\/v2\\.0\\/token|\\/api\\/account\\/login/i.test(url); }
   function keysOf(storage) {
     var out = [];
     try {
@@ -27,9 +54,7 @@ const TRACE_INSTRUMENTATION_JS = `
         var k = storage.key(i);
         out.push(k + ' (' + String(storage.getItem(k) || '').length + ' chars)');
       }
-    } catch (e) {
-      out.push('unreadable: ' + String(e && e.message));
-    }
+    } catch (e) { out.push('unreadable: ' + String(e && e.message)); }
     return out;
   }
   function snapshotStorage(label) {
@@ -41,35 +66,68 @@ const TRACE_INSTRUMENTATION_JS = `
       sessionStorage: keysOf(window.sessionStorage),
     });
   }
+
   var origFetch = window.fetch;
   window.fetch = function (input, init) {
     var url = (input && input.url) || String(input);
     var method = (init && init.method) || (input && input.method) || 'GET';
+    var reqBody = init && init.body;
     return origFetch.apply(this, arguments).then(
       function (res) {
         send('fetch', { method: method, url: url, status: res.status, redirected: res.redirected, finalUrl: res.url });
+        if (wantReqDetail(url) && reqBody) send('reqbody', { url: url, body: redactForm(reqBody) });
+        if (wantResBody(url)) {
+          try {
+            res.clone().text().then(function (t) {
+              // Stash the raw tokens (never sent) so we can identify which one
+              // authorizes /api/account/login; report only the redacted body.
+              try { var o = JSON.parse(t); window.__tok = { at: o.access_token, it: o.id_token }; } catch (e) {}
+              send('resbody', { url: url, body: redactJson(t) });
+            });
+          } catch (e) {}
+        }
         return res;
       },
-      function (err) {
-        send('fetch', { method: method, url: url, error: String(err) });
-        throw err;
-      }
+      function (err) { send('fetch', { method: method, url: url, error: String(err) }); throw err; }
     );
   };
+
   var origOpen = XMLHttpRequest.prototype.open;
   var origSend = XMLHttpRequest.prototype.send;
+  var origSetHeader = XMLHttpRequest.prototype.setRequestHeader;
   XMLHttpRequest.prototype.open = function (method, url) {
-    this.__trace = { method: method, url: String(url) };
+    this.__t = { method: method, url: String(url), headers: {} };
     return origOpen.apply(this, arguments);
   };
-  XMLHttpRequest.prototype.send = function () {
+  XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+    try {
+      if (this.__t) {
+        if (/authorization/i.test(name)) {
+          var sp = String(value).indexOf(' ');
+          this.__t.headers[name] = (sp > 0 ? String(value).slice(0, sp) : '') + ' [REDACTED:' + String(value).length + ']';
+          // Which token is this? Compare against the last token response.
+          if (/\\/api\\/account\\/login/i.test(this.__t.url || '') && window.__tok) {
+            var bv = String(value).replace(/^\\S+\\s+/, '');
+            this.__t.authMatch = bv === window.__tok.at ? 'access_token' : (bv === window.__tok.it ? 'id_token' : 'other');
+          }
+        } else {
+          this.__t.headers[name] = value;
+        }
+      }
+    } catch (e) {}
+    return origSetHeader.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.send = function (body) {
     var xhr = this;
     xhr.addEventListener('loadend', function () {
-      var t = xhr.__trace || {};
+      var t = xhr.__t || {};
       send('xhr', { method: t.method, url: t.url, status: xhr.status, responseURL: xhr.responseURL });
+      if (t.url && wantReqDetail(t.url)) send('reqdetail', { url: t.url, headers: t.headers, authMatch: t.authMatch, body: body ? redactForm(body) : null });
+      if (t.url && wantResBody(t.url)) { try { send('resbody', { url: t.url, body: redactJson(xhr.responseText) }); } catch (e) {} }
     });
     return origSend.apply(this, arguments);
   };
+
   snapshotStorage('document start');
   window.addEventListener('load', function () { snapshotStorage('window load'); });
   setTimeout(function () { snapshotStorage('after 5s'); }, 5000);
@@ -388,6 +446,17 @@ export default function TestConnectionScreen({ navigation }) {
       } else {
         append(`[${msg.type}] ${msg.method} ${msg.url} → ${msg.status}${msg.redirected ? ` (redirected → ${msg.finalUrl})` : ''}`);
       }
+    } else if (msg.type === 'reqbody') {
+      append(`[req body] ${msg.url}`);
+      append(`  ${msg.body}`);
+    } else if (msg.type === 'resbody') {
+      append(`[res body] ${msg.url}`);
+      append(`  ${msg.body}`);
+    } else if (msg.type === 'reqdetail') {
+      append(`[req detail] ${msg.url}`);
+      append(`  headers: ${JSON.stringify(msg.headers || {})}`);
+      if (msg.authMatch) append(`  auth token = ${msg.authMatch}`);
+      if (msg.body) append(`  body: ${msg.body}`);
     } else if (msg.type === 'storage') {
       append(`[storage @ ${msg.label}] ${msg.url}`);
       append(`  document.cookie: ${msg.cookie || '(empty)'}`);

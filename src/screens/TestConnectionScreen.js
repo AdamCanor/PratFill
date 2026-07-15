@@ -81,8 +81,10 @@ export default function TestConnectionScreen({ navigation }) {
       } else {
         append('❌ Still not overwritten — this is the real cookie, not our garbage value.');
       }
+      return nowValue;
     } catch (err) {
       append(`❌ Error: ${err.message}`);
+      return null;
     }
   };
 

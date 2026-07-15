@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import CookieManager from '@preeternal/react-native-cookie-manager';
-import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, getLastReauthAttempt, COOKIE_DOMAIN } from '../api/doch1';
+import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, getLastReauthAttempt, COOKIE_DOMAIN, LOGIN_URL } from '../api/doch1';
 import { getLastAutoSubmitRun } from '../tasks/runAutoSubmit';
 import { colors, spacing, radius } from '../theme';
 
@@ -81,6 +81,32 @@ export default function TestConnectionScreen({ navigation }) {
     append(JSON.stringify(lastRun, null, 2));
   };
 
+  const inspectLoginPage = async () => {
+    setLog([]);
+    setRunning(true);
+    try {
+      const cookieHeader = await getStoredCookieHeader();
+      append(`Sending cookie header (${cookieHeader.length} chars)...`);
+      const res = await fetch(LOGIN_URL, {
+        redirect: 'follow',
+        headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+      });
+      append(`status: ${res.status}`);
+      append(`redirected: ${res.redirected}`);
+      append(`final url: ${res.url}`);
+      const setCookie = res.headers.get?.('set-cookie');
+      if (setCookie) append(`set-cookie header: ${setCookie}`);
+      const text = await res.text();
+      append(`body length: ${text.length} chars`);
+      append('--- body (first 1000 chars) ---');
+      append(text.slice(0, 1000));
+    } catch (err) {
+      append(`❌ Error: ${err.message}`);
+    } finally {
+      setRunning(false);
+    }
+  };
+
   const runReauthTest = async () => {
     setLog([]);
     setRunning(true);
@@ -128,6 +154,10 @@ export default function TestConnectionScreen({ navigation }) {
 
       <TouchableOpacity style={styles.secondaryButton} onPress={runReauthTest} disabled={running}>
         <Text style={styles.secondaryButtonText}>Test silent re-auth</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.secondaryButton} onPress={inspectLoginPage} disabled={running}>
+        <Text style={styles.secondaryButtonText}>Inspect login page response</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.secondaryButton} onPress={showLastAutoSubmitRun} disabled={running}>

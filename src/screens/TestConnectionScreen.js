@@ -108,6 +108,30 @@ export default function TestConnectionScreen({ navigation }) {
     }
   };
 
+  const describeCookie = (name, c) =>
+    `${name}: value=${c.value?.length ?? 0} chars (${(c.value || '').slice(0, 12)}…) ` +
+    `path=${c.path ?? '(none)'} domain=${c.domain ?? '(none)'} ` +
+    `expires=${c.expires ?? '(session)'} secure=${c.secure ?? false} httpOnly=${c.httpOnly ?? false}`;
+
+  const listCookies = async () => {
+    setLog([]);
+    try {
+      append(`--- CookieManager.get(${COOKIE_DOMAIN}) ---`);
+      const scoped = await CookieManager.get(COOKIE_DOMAIN);
+      const scopedNames = Object.keys(scoped || {});
+      append(`${scopedNames.length} cookie(s): ${scopedNames.join(', ') || '(none)'}`);
+      scopedNames.forEach((name) => append(describeCookie(name, scoped[name])));
+
+      append('--- CookieManager.getAll() (unscoped, everything stored) ---');
+      const all = await CookieManager.getAll();
+      const allNames = Object.keys(all || {});
+      append(`${allNames.length} cookie(s): ${allNames.join(', ') || '(none)'}`);
+      allNames.forEach((name) => append(describeCookie(name, all[name])));
+    } catch (err) {
+      append(`❌ Error: ${err.message}`);
+    }
+  };
+
   const inspectLoginPage = () => inspectUrl(LOGIN_URL, 'Inspecting login page (/)...');
   const inspectGetUser = () => inspectUrl(`${COOKIE_DOMAIN}/api/account/getUser`, 'Inspecting /api/account/getUser...');
 
@@ -150,6 +174,10 @@ export default function TestConnectionScreen({ navigation }) {
 
       <TouchableOpacity style={styles.secondaryButton} onPress={onClearCookies}>
         <Text style={styles.secondaryButtonText}>Clear cookies</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.secondaryButton} onPress={listCookies}>
+        <Text style={styles.secondaryButtonText}>List all cookies</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.secondaryButton} onPress={onInvalidateAppCookie}>

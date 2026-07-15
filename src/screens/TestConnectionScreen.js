@@ -81,22 +81,35 @@ export default function TestConnectionScreen({ navigation }) {
     append(JSON.stringify(lastRun, null, 2));
   };
 
+  const CACHE_DEBUG_HEADERS = ['set-cookie', 'cache-control', 'age', 'x-iinfo', 'x-cdn', 'x-cache', 'cf-cache-status', 'etag'];
+
   const inspectUrl = async (url, label) => {
     setLog([]);
     setRunning(true);
     try {
       const cookieHeader = await getStoredCookieHeader();
+      // Cache-bust in case Incapsula (the WAF sitting in front of this site,
+      // per the cookie names) is serving an edge-cached response instead of
+      // hitting the origin live for this exact cookie.
+      const bustedUrl = `${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}`;
       append(`${label}`);
       append(`Sending cookie header (${cookieHeader.length} chars)...`);
-      const res = await fetch(url, {
+      const res = await fetch(bustedUrl, {
         redirect: 'follow',
-        headers: cookieHeader ? { cookie: cookieHeader, accept: 'application/json, text/plain, */*' } : undefined,
+        headers: {
+          ...(cookieHeader ? { cookie: cookieHeader } : {}),
+          accept: 'application/json, text/plain, */*',
+          'cache-control': 'no-cache',
+          pragma: 'no-cache',
+        },
       });
       append(`status: ${res.status}`);
       append(`redirected: ${res.redirected}`);
       append(`final url: ${res.url}`);
-      const setCookie = res.headers.get?.('set-cookie');
-      append(`set-cookie header: ${setCookie || '(none)'}`);
+      CACHE_DEBUG_HEADERS.forEach((h) => {
+        const v = res.headers.get?.(h);
+        if (v) append(`${h}: ${v}`);
+      });
       const text = await res.text();
       append(`body length: ${text.length} chars`);
       append('--- body (first 1000 chars) ---');
@@ -123,10 +136,15 @@ export default function TestConnectionScreen({ navigation }) {
       scopedNames.forEach((name) => append(describeCookie(name, scoped[name])));
 
       append('--- CookieManager.getAll() (unscoped, everything stored) ---');
-      const all = await CookieManager.getAll();
-      const allNames = Object.keys(all || {});
-      append(`${allNames.length} cookie(s): ${allNames.join(', ') || '(none)'}`);
-      allNames.forEach((name) => append(describeCookie(name, all[name])));
+      try {
+        const all = await CookieManager.getAll();
+        const allNames = Object.keys(all || {});
+        append(`${allNames.length} cookie(s): ${allNames.join(', ') || '(none)'}`);
+        allNames.forEach((name) => append(describeCookie(name, all[name])));
+      } catch (_) {
+        // getAll() is iOS-only on this library — not a real error on Android.
+        append('(not supported on Android — expected, not an error)');
+      }
     } catch (err) {
       append(`❌ Error: ${err.message}`);
     }

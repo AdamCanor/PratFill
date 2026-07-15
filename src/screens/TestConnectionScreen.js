@@ -81,19 +81,18 @@ export default function TestConnectionScreen({ navigation }) {
       const appCookieBefore = before?.AppCookie?.value;
 
       // clearByName() unconditionally rejects on Android (checked the native
-      // module source: it's simply not implemented for this platform, not a
-      // sometimes-fails thing) — don't call it. getCookie() also never
-      // exposes path/domain to JS on Android (it returns a bare
-      // "name=value; ..." string with no attributes, a structural API
-      // limitation, not something set() can work around) — but AppCookie
-      // has shown up in every root-URL-scoped read so far, so its real path
-      // must already be "/", matching what we set below.
-      const setOk = await CookieManager.set(COOKIE_DOMAIN, {
-        name: 'AppCookie',
-        value: 'invalidated-for-testing',
-        path: '/',
-      });
-      append(`set() result: ${setOk}`);
+      // module source: not implemented for this platform at all). set()
+      // also turned out to be a dead end: its native implementation always
+      // builds an explicit Domain=one.prat.idf.il attribute (there's no way
+      // to opt out), which makes a RFC 6265 "domain cookie" — a different
+      // cookie identity than the real AppCookie, which is almost certainly
+      // host-only (no Domain attribute at all, normal for a same-origin auth
+      // cookie). Two different identities don't collide/replace each other,
+      // which is why the overwrite kept silently no-op'ing despite
+      // set()=true. setFromResponse() takes a raw string and skips that
+      // auto-domain logic entirely, so this writes a true host-only cookie.
+      const setOk = await CookieManager.setFromResponse(COOKIE_DOMAIN, 'AppCookie=invalidated-for-testing; path=/');
+      append(`setFromResponse() result: ${setOk}`);
       await CookieManager.flush?.();
 
       const after = await logAllCookies('--- Cookies AFTER invalidate ---');

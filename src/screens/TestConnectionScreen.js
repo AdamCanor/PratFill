@@ -81,21 +81,22 @@ export default function TestConnectionScreen({ navigation }) {
     append(JSON.stringify(lastRun, null, 2));
   };
 
-  const inspectLoginPage = async () => {
+  const inspectUrl = async (url, label) => {
     setLog([]);
     setRunning(true);
     try {
       const cookieHeader = await getStoredCookieHeader();
+      append(`${label}`);
       append(`Sending cookie header (${cookieHeader.length} chars)...`);
-      const res = await fetch(LOGIN_URL, {
+      const res = await fetch(url, {
         redirect: 'follow',
-        headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+        headers: cookieHeader ? { cookie: cookieHeader, accept: 'application/json, text/plain, */*' } : undefined,
       });
       append(`status: ${res.status}`);
       append(`redirected: ${res.redirected}`);
       append(`final url: ${res.url}`);
       const setCookie = res.headers.get?.('set-cookie');
-      if (setCookie) append(`set-cookie header: ${setCookie}`);
+      append(`set-cookie header: ${setCookie || '(none)'}`);
       const text = await res.text();
       append(`body length: ${text.length} chars`);
       append('--- body (first 1000 chars) ---');
@@ -106,6 +107,9 @@ export default function TestConnectionScreen({ navigation }) {
       setRunning(false);
     }
   };
+
+  const inspectLoginPage = () => inspectUrl(LOGIN_URL, 'Inspecting login page (/)...');
+  const inspectGetUser = () => inspectUrl(`${COOKIE_DOMAIN}/api/account/getUser`, 'Inspecting /api/account/getUser...');
 
   const runReauthTest = async () => {
     setLog([]);
@@ -158,6 +162,10 @@ export default function TestConnectionScreen({ navigation }) {
 
       <TouchableOpacity style={styles.secondaryButton} onPress={inspectLoginPage} disabled={running}>
         <Text style={styles.secondaryButtonText}>Inspect login page response</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.secondaryButton} onPress={inspectGetUser} disabled={running}>
+        <Text style={styles.secondaryButtonText}>Inspect getUser response</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.secondaryButton} onPress={showLastAutoSubmitRun} disabled={running}>

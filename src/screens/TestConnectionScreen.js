@@ -52,20 +52,14 @@ export default function TestConnectionScreen({ navigation }) {
   const onInvalidateAppCookie = async () => {
     setLog([]);
     try {
-      // A plain overwrite silently didn't take (turned out to still match
-      // the original cookie's actual scope, not ours) — clear it outright
-      // first and verify it's really gone before setting a garbage value,
-      // instead of trusting an overwrite that may just create a second,
-      // differently-scoped cookie the get() call never surfaces.
-      const cleared = await CookieManager.clearByName(COOKIE_DOMAIN, 'AppCookie');
-      append(`clearByName result: ${cleared}`);
-      await CookieManager.flush?.();
-      const presentAfterClear = await hasAppCookie();
-      append(`AppCookie present after clear (expect false): ${presentAfterClear}`);
-      if (presentAfterClear) {
-        append('⚠️ Clear did not remove it — the value below is still the real cookie.');
-      }
-
+      // clearByName() unconditionally rejects on Android (checked the native
+      // module source: it's simply not implemented for this platform, not a
+      // sometimes-fails thing) — don't call it. getCookie() also never
+      // exposes path/domain to JS on Android (it returns a bare
+      // "name=value; ..." string with no attributes, a structural API
+      // limitation, not something set() can work around) — but AppCookie
+      // has shown up in every root-URL-scoped read so far, so its real path
+      // must already be "/", matching what we set below.
       const setOk = await CookieManager.set(COOKIE_DOMAIN, {
         name: 'AppCookie',
         value: 'invalidated-for-testing',

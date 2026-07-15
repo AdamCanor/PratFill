@@ -11,10 +11,29 @@ export default function TestConnectionScreen({ navigation }) {
 
   const append = (line) => setLog((prev) => [...prev, line]);
 
+  const describeCookie = (name, c) =>
+    `${name}: value=${c.value?.length ?? 0} chars (${(c.value || '').slice(0, 12)}…) ` +
+    `path=${c.path ?? '(none)'} domain=${c.domain ?? '(none)'} ` +
+    `expires=${c.expires ?? '(session)'} secure=${c.secure ?? false} httpOnly=${c.httpOnly ?? false}`;
+
+  // Full cookie dump, reused everywhere so every diagnostic shows the
+  // complete picture instead of just the one cookie a given action cares
+  // about — useful for noticing side effects we didn't expect.
+  const logAllCookies = async (label) => {
+    append(label);
+    const cookies = await CookieManager.get(COOKIE_DOMAIN);
+    const names = Object.keys(cookies || {});
+    append(`${names.length} cookie(s): ${names.join(', ') || '(none)'}`);
+    names.forEach((name) => append(describeCookie(name, cookies[name])));
+    return cookies;
+  };
+
   const runTest = async () => {
     setLog([]);
     setRunning(true);
     try {
+      await logAllCookies('--- Cookies before test ---');
+
       append('Checking for AppCookie...');
       const ok = await hasAppCookie();
       if (!ok) {
@@ -24,34 +43,43 @@ export default function TestConnectionScreen({ navigation }) {
       append('✅ AppCookie present.');
 
       const header = await getStoredCookieHeader();
-      append(`Cookie header length: ${header.length} chars`);
+      append(`Cookie header (${header.length} chars): ${header}`);
 
       const now = new Date();
       append(`Calling getFutureReport(${now.getMonth() + 1}, ${now.getFullYear()})...`);
       const res = await getFutureReports(now.getMonth() + 1, now.getFullYear());
       append('✅ Response received:');
-      append(JSON.stringify(res, null, 2).slice(0, 1500));
+      append(JSON.stringify(res, null, 2));
     } catch (err) {
       if (err instanceof AuthError) {
         append(`❌ AuthError: ${err.message}`);
+        append(`AuthError name: ${err.name}, stack: ${err.stack}`);
         append('Cookie is invalid/expired — go to Login.');
       } else {
         append(`❌ Error: ${err.message}`);
+        append(`Error name: ${err.name}, stack: ${err.stack}`);
       }
     } finally {
       append(`Last reauth attempt (may be from this run or an earlier one): ${JSON.stringify(getLastReauthAttempt())}`);
+      await logAllCookies('--- Cookies after test ---');
       setRunning(false);
     }
   };
 
   const onClearCookies = async () => {
+    setLog([]);
+    await logAllCookies('--- Cookies before clear ---');
     await clearCookies();
     append('Cookies cleared.');
+    await logAllCookies('--- Cookies after clear ---');
   };
 
   const onInvalidateAppCookie = async () => {
     setLog([]);
     try {
+      const before = await logAllCookies('--- Cookies BEFORE invalidate ---');
+      const appCookieBefore = before?.AppCookie?.value;
+
       // clearByName() unconditionally rejects on Android (checked the native
       // module source: it's simply not implemented for this platform, not a
       // sometimes-fails thing) — don't call it. getCookie() also never
@@ -67,17 +95,22 @@ export default function TestConnectionScreen({ navigation }) {
       });
       append(`set() result: ${setOk}`);
       await CookieManager.flush?.();
-      const cookies = await CookieManager.get(COOKIE_DOMAIN);
-      const nowValue = cookies?.AppCookie?.value;
-      append(`AppCookie value now (${nowValue?.length ?? 0} chars): ${nowValue}`);
-      if (nowValue === 'invalidated-for-testing') {
+
+      const after = await logAllCookies('--- Cookies AFTER invalidate ---');
+      const appCookieAfter = after?.AppCookie?.value;
+
+      append(`AppCookie before: ${appCookieBefore}`);
+      append(`AppCookie after: ${appCookieAfter}`);
+      append(`AppCookie changed: ${appCookieBefore !== appCookieAfter}`);
+      if (appCookieAfter === 'invalidated-for-testing') {
         append('✅ Genuinely invalidated this time.');
       } else {
         append('❌ Still not overwritten — this is the real cookie, not our garbage value.');
       }
-      return nowValue;
+      return appCookieAfter;
     } catch (err) {
       append(`❌ Error: ${err.message}`);
+      append(`Error name: ${err.name}, stack: ${err.stack}`);
       return null;
     }
   };
@@ -92,19 +125,20 @@ export default function TestConnectionScreen({ navigation }) {
     append(JSON.stringify(lastRun, null, 2));
   };
 
-  const CACHE_DEBUG_HEADERS = ['set-cookie', 'cache-control', 'age', 'x-iinfo', 'x-cdn', 'x-cache', 'cf-cache-status', 'etag'];
-
   const inspectUrl = async (url, label) => {
     setLog([]);
     setRunning(true);
     try {
+      await logAllCookies('--- Cookies before request ---');
+
       const cookieHeader = await getStoredCookieHeader();
       // Cache-bust in case Incapsula (the WAF sitting in front of this site,
       // per the cookie names) is serving an edge-cached response instead of
       // hitting the origin live for this exact cookie.
       const bustedUrl = `${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}`;
       append(`${label}`);
-      append(`Sending cookie header (${cookieHeader.length} chars)...`);
+      append(`Request URL: ${bustedUrl}`);
+      append(`Sending cookie header (${cookieHeader.length} chars): ${cookieHeader}`);
       const res = await fetch(bustedUrl, {
         redirect: 'follow',
         headers: {
@@ -114,37 +148,37 @@ export default function TestConnectionScreen({ navigation }) {
           pragma: 'no-cache',
         },
       });
-      append(`status: ${res.status}`);
+      append(`status: ${res.status} (${res.statusText || ''})`);
+      append(`ok: ${res.ok}`);
       append(`redirected: ${res.redirected}`);
+      append(`type: ${res.type}`);
       append(`final url: ${res.url}`);
-      CACHE_DEBUG_HEADERS.forEach((h) => {
-        const v = res.headers.get?.(h);
-        if (v) append(`${h}: ${v}`);
-      });
+      append('--- all response headers ---');
+      if (res.headers?.forEach) {
+        res.headers.forEach((value, key) => append(`${key}: ${value}`));
+      } else if (res.headers?.entries) {
+        for (const [key, value] of res.headers.entries()) append(`${key}: ${value}`);
+      } else {
+        append('(no way to enumerate headers on this platform)');
+      }
       const text = await res.text();
       append(`body length: ${text.length} chars`);
-      append('--- body (first 1000 chars) ---');
-      append(text.slice(0, 1000));
+      append('--- full body ---');
+      append(text);
+
+      await logAllCookies('--- Cookies after request ---');
     } catch (err) {
       append(`❌ Error: ${err.message}`);
+      append(`Error name: ${err.name}, stack: ${err.stack}`);
     } finally {
       setRunning(false);
     }
   };
 
-  const describeCookie = (name, c) =>
-    `${name}: value=${c.value?.length ?? 0} chars (${(c.value || '').slice(0, 12)}…) ` +
-    `path=${c.path ?? '(none)'} domain=${c.domain ?? '(none)'} ` +
-    `expires=${c.expires ?? '(session)'} secure=${c.secure ?? false} httpOnly=${c.httpOnly ?? false}`;
-
   const listCookies = async () => {
     setLog([]);
     try {
-      append(`--- CookieManager.get(${COOKIE_DOMAIN}) ---`);
-      const scoped = await CookieManager.get(COOKIE_DOMAIN);
-      const scopedNames = Object.keys(scoped || {});
-      append(`${scopedNames.length} cookie(s): ${scopedNames.join(', ') || '(none)'}`);
-      scopedNames.forEach((name) => append(describeCookie(name, scoped[name])));
+      await logAllCookies(`--- CookieManager.get(${COOKIE_DOMAIN}) ---`);
 
       append('--- CookieManager.getAll() (unscoped, everything stored) ---');
       try {
@@ -158,6 +192,7 @@ export default function TestConnectionScreen({ navigation }) {
       }
     } catch (err) {
       append(`❌ Error: ${err.message}`);
+      append(`Error name: ${err.name}, stack: ${err.stack}`);
     }
   };
 
@@ -170,16 +205,21 @@ export default function TestConnectionScreen({ navigation }) {
     try {
       const before = await hasAppCookie();
       append(`AppCookie present before: ${before}`);
+      await logAllCookies('--- Cookies BEFORE reauth ---');
+
       append('Calling attemptSilentReauth()...');
       const { recovered, redirected, finalUrl, skipped } = await attemptSilentReauth();
       if (skipped) append(`skipped: ${skipped} (still on cooldown from a previous failed attempt)`);
       append(`recovered: ${recovered}`);
       append(`redirected: ${redirected}`);
       append(`finalUrl: ${finalUrl}`);
+
       const after = await hasAppCookie();
       append(`AppCookie present after: ${after}`);
+      await logAllCookies('--- Cookies AFTER reauth ---');
     } catch (err) {
       append(`❌ Error: ${err.message}`);
+      append(`Error name: ${err.name}, stack: ${err.stack}`);
     } finally {
       setRunning(false);
     }

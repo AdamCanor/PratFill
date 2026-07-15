@@ -70,10 +70,10 @@ export async function clearCookies() {
 // identified via the "Instrumented login trace" in TestConnectionScreen.
 //
 // Supporting pieces already in place:
-// - refreshAppCookie() is the seam the background worker calls before every
-//   submit. Its refresh body is a no-op until the trace identifies the
-//   mechanism (then Path A: replicate the HTTP call the SPA's JS makes, or
-//   Path B: drive a native background WebView).
+// - refreshAppCookie() (below) is the seam the background worker calls before
+//   every submit. It's implemented as Path A: redeem the MSAL refresh token
+//   at Azure, then GET /api/account/login with the id_token to mint a fresh
+//   AppCookie — see its own doc block for the full flow.
 // - On launch with a dead session, RootNavigator mounts the hidden
 //   SessionRefreshWebView (components/SessionRefreshWebView.js) behind the
 //   splash — a real WebView login, minus the screen. This is a SECONDARY
@@ -304,36 +304,129 @@ export async function getUser() {
   return res.json();
 }
 
+// --- Headless session refresh (Microsoft Entra / MSAL) -----------------
+//
+// The portal authenticates via Azure AD (Entra) using MSAL.js. Recovering a
+// dead AppCookie without any user interaction is two HTTP calls (confirmed by
+// on-device instrumented traces):
+//   1. Redeem the MSAL refresh token at Azure's token endpoint → fresh
+//      id_token. The refresh token lives in the web app's localStorage; we
+//      capture it during real WebView logins (see useLoginDetection's
+//      MSAL_RT_CAPTURE_JS) and persist it here.
+//   2. GET /api/account/login with `Authorization: <id_token>` (the RAW
+//      id_token, no "Bearer " prefix — verified from the trace) → the backend
+//      Set-Cookies a fresh AppCookie.
+// This runs in plain headless JS, so the background worker can keep the week
+// filled without the app ever being opened.
+
+const MSAL_RT_KEY = 'doch1_msal_rt';
+// Scope the SPA itself requests (from the trace). offline_access makes Azure
+// return a rotated refresh token each time, so the chain continues.
+const AAD_SCOPE = 'User.Read openid profile offline_access';
+
+// { secret, clientId, tenantId } — captured from MSAL's localStorage.
+export async function saveMsalRefreshToken(data) {
+  if (!data?.secret) return;
+  const prev = (await getMsalRefreshToken()) || {};
+  await AsyncStorage.setItem(MSAL_RT_KEY, JSON.stringify({ ...prev, ...data }));
+}
+
+export async function getMsalRefreshToken() {
+  const raw = await AsyncStorage.getItem(MSAL_RT_KEY);
+  return raw ? JSON.parse(raw) : null;
+}
+
+async function clearMsalRefreshToken() {
+  await AsyncStorage.removeItem(MSAL_RT_KEY);
+}
+
+function encodeForm(fields) {
+  return Object.entries(fields)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&');
+}
+
 // Ensure there's a working session, refreshing a dead AppCookie headlessly if
-// possible. This is the seam the whole autonomous-daily background feature
-// hangs on: the worker calls it before every submit so the week stays filled
-// without the user ever opening the app.
-//
-// Returns { ok, attempted }:
+// possible. Returns { ok, attempted }:
 //   ok        — we now have a live session (getUser confirms it).
-//   attempted — whether a real headless refresh was actually tried. This lets
-//               the caller tell a genuine long-login death (attempted && !ok
-//               → notify "re-login required") apart from "no refresh mechanism
-//               wired up yet" (!attempted && !ok → stay quiet / fall back to a
-//               coverage-based throttle).
-//
-// The refresh BODY is deliberately still a no-op: a plain headless fetch
-// cannot revive a dead AppCookie for this site (proven — see the session
-// model above), and the mechanism a real browser uses is not yet identified.
-// The "Instrumented login trace" tool in TestConnectionScreen exists to
-// capture it; once known, this is where Path A (replicate the HTTP call[s]
-// the SPA's JS makes) or Path B (drive a native background WebView) plugs in,
-// setting attempted:true.
+//   attempted — whether a real refresh was tried. Lets the caller tell a
+//               genuine long-login death (attempted && !ok → notify
+//               "re-login required") apart from "nothing to try" (no stored
+//               refresh token yet).
 export async function refreshAppCookie() {
   try {
     const user = await getUser();
     if (user?.isUserAuth) return { ok: true, attempted: false };
   } catch (_) {
-    // Network hiccup — fall through and report we couldn't establish one.
+    // Network hiccup — fall through and try a real refresh.
   }
 
-  // >>> Step 2 (post-trace) implements the real headless refresh here. <<<
-  return { ok: false, attempted: false, reason: 'refresh-not-implemented' };
+  const rt = await getMsalRefreshToken();
+  if (!rt?.secret || !rt?.tenantId || !rt?.clientId) {
+    // No Azure refresh token captured yet — only a real WebView login can
+    // seed one. Treat as "needs login".
+    return { ok: false, attempted: true, reason: 'no-refresh-token' };
+  }
+
+  try {
+    // 1. Redeem the refresh token for a fresh id_token.
+    const tokenUrl = `https://login.microsoftonline.com/${rt.tenantId}/oauth2/v2.0/token`;
+    const tokenRes = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        // SPA-issued refresh tokens must be redeemed cross-origin; Azure
+        // checks Origin (AADSTS9002327 otherwise). RN lets us set it.
+        origin: BASE_URL,
+      },
+      body: encodeForm({
+        client_id: rt.clientId,
+        scope: AAD_SCOPE,
+        grant_type: 'refresh_token',
+        refresh_token: rt.secret,
+        client_info: '1',
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      const errText = await tokenRes.text().catch(() => '');
+      // A 4xx means the refresh token itself is dead (expired/revoked/rotated
+      // away) → the long-lived login is genuinely gone, drop it so we don't
+      // keep retrying a dead token.
+      if (tokenRes.status >= 400 && tokenRes.status < 500) await clearMsalRefreshToken();
+      return { ok: false, attempted: true, reason: `token-${tokenRes.status}: ${errText.slice(0, 160)}` };
+    }
+
+    const tokens = await tokenRes.json();
+    const idToken = tokens?.id_token;
+    if (!idToken) return { ok: false, attempted: true, reason: 'no-id-token' };
+    // Persist the rotated refresh token so the next run can continue.
+    if (tokens.refresh_token) await saveMsalRefreshToken({ ...rt, secret: tokens.refresh_token });
+
+    // 2. Exchange the id_token for a fresh AppCookie. Authorization is the raw
+    //    id_token with no "Bearer " prefix (per the trace). Send existing
+    //    cookies too (Incapsula/WAF cookies matter; the dead AppCookie is
+    //    harmless and gets overwritten by the response's Set-Cookie).
+    const cookieHeader = await getStoredCookieHeader();
+    const loginRes = await fetch(`${BASE_URL}/api/account/login`, {
+      headers: {
+        accept: 'application/json, text/plain, */*',
+        authorization: idToken,
+        ...(cookieHeader ? { cookie: cookieHeader } : {}),
+      },
+    });
+    if (!loginRes.ok) return { ok: false, attempted: true, reason: `login-${loginRes.status}` };
+
+    // 3. Confirm the fresh AppCookie landed in the jar and works.
+    try {
+      await CookieManager.flush?.();
+    } catch (_) {}
+    const verify = await getUser();
+    if (verify?.isUserAuth) return { ok: true, attempted: true };
+    return { ok: false, attempted: true, reason: 'login-ok-but-getuser-unauth' };
+  } catch (e) {
+    return { ok: false, attempted: true, reason: String(e?.message || e).slice(0, 200) };
+  }
 }
 
 export async function getAllFilterStatuses() {

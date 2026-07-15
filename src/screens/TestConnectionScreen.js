@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { WebView } from 'react-native-webview';
 import CookieManager from '@preeternal/react-native-cookie-manager';
-import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, getLastReauthAttempt, COOKIE_DOMAIN, LOGIN_URL } from '../api/doch1';
+import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, getLastReauthAttempt, refreshAppCookie, getMsalRefreshToken, COOKIE_DOMAIN, LOGIN_URL } from '../api/doch1';
 import { getLastAutoSubmitRun } from '../tasks/runAutoSubmit';
 import { colors, spacing, radius } from '../theme';
 
@@ -465,6 +465,37 @@ export default function TestConnectionScreen({ navigation }) {
     }
   };
 
+  // Runs the actual headless refresh (refreshAppCookie) — the same call the
+  // background worker makes. This is how we validate Path A on-device without
+  // waiting for a background fire: invalidate AppCookie, then run this and
+  // watch it come back to a real 368-char CfDJ ticket.
+  const testHeadlessRefresh = async () => {
+    setLog([]);
+    setRunning(true);
+    try {
+      const rt = await getMsalRefreshToken();
+      append(`Stored refresh token: ${rt?.secret ? `present (${rt.secret.length} chars), tenant=${rt.tenantId}, client=${rt.clientId}` : 'NONE — open Login once to capture it'}`);
+      const before = (await CookieManager.get(COOKIE_DOMAIN))?.AppCookie?.value;
+      append(`AppCookie before: ${before ? `${before.slice(0, 16)}… (${before.length} chars)` : '(none)'}`);
+
+      append('Calling refreshAppCookie()...');
+      const res = await refreshAppCookie();
+      append(`Result: ${JSON.stringify(res)}`);
+
+      await CookieManager.flush?.();
+      const after = (await CookieManager.get(COOKIE_DOMAIN))?.AppCookie?.value;
+      append(`AppCookie after: ${after ? `${after.slice(0, 16)}… (${after.length} chars)` : '(none)'}`);
+      append(`AppCookie changed: ${before !== after}`);
+      if (res.ok && after && after.length > 100) append('✅ Headless refresh works — a fresh AppCookie was minted with no WebView.');
+      else if (!res.ok) append(`❌ Refresh failed: ${res.reason || 'unknown'}`);
+    } catch (err) {
+      append(`❌ Error: ${err.message}`);
+      append(`Error name: ${err.name}, stack: ${err.stack}`);
+    } finally {
+      setRunning(false);
+    }
+  };
+
   // Exercises the REAL background worker path (TaskManager task via
   // WorkManager), not just runAutoSubmit() on the JS thread. Debug builds
   // only — the API rejects in production.
@@ -550,6 +581,10 @@ export default function TestConnectionScreen({ navigation }) {
 
         <TouchableOpacity style={styles.secondaryButton} onPress={showLastAutoSubmitRun} disabled={running}>
           <Text style={styles.secondaryButtonText}>Show last auto-submit run</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.secondaryButton} onPress={testHeadlessRefresh} disabled={running}>
+          <Text style={styles.secondaryButtonText}>Test headless refresh (refreshAppCookie)</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.secondaryButton} onPress={startTrace} disabled={running}>

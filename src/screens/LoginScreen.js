@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { colors, spacing } from '../theme';
 import { LOGIN_URL } from '../api/doch1';
-import { useLoginDetection } from '../hooks/useLoginDetection';
+import { useLoginDetection, MSAL_RT_CAPTURE_JS, handleLoginWebViewMessage } from '../hooks/useLoginDetection';
 
 export default function LoginScreen({ navigation }) {
   const webviewRef = useRef(null);
@@ -34,6 +34,8 @@ export default function LoginScreen({ navigation }) {
         source={{ uri: LOGIN_URL }}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
+        injectedJavaScript={MSAL_RT_CAPTURE_JS}
+        onMessage={handleLoginWebViewMessage}
         onNavigationStateChange={onNavigationStateChange}
         onLoadEnd={onNavigationStateChange}
         startInLoadingState

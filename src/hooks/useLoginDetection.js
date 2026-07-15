@@ -1,9 +1,52 @@
 import { useCallback, useRef } from 'react';
 import CookieManager from '@preeternal/react-native-cookie-manager';
-import { COOKIE_DOMAIN } from '../api/doch1';
+import { COOKIE_DOMAIN, saveMsalRefreshToken } from '../api/doch1';
 
 // Pages that only render once the AppCookie session is established.
 export const LOGGED_IN_PATH_HINTS = ['/hp', '/secondaries', '/calendar', '/primaries'];
+
+// Injected into the login WebView to capture MSAL's Azure refresh token out
+// of localStorage so the headless background refresh (refreshAppCookie in
+// doch1.js) has a credential to work with. MSAL writes the token after its
+// own exchange completes, so poll briefly. The token never leaves the device
+// — it's postMessage'd to RN and stored in AsyncStorage, mirroring where MSAL
+// itself keeps it (localStorage).
+export const MSAL_RT_CAPTURE_JS = `
+(function () {
+  function grab() {
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k.indexOf('-refreshtoken-') >= 0) {
+          var v = JSON.parse(localStorage.getItem(k) || '{}');
+          if (v && v.secret) {
+            var tid = '';
+            if (v.homeAccountId && v.homeAccountId.indexOf('.') >= 0) tid = v.homeAccountId.split('.')[1];
+            window.ReactNativeWebView.postMessage(JSON.stringify({ __msalRt: true, secret: v.secret, clientId: v.clientId || '', tenantId: tid }));
+            return true;
+          }
+        }
+      }
+    } catch (e) {}
+    return false;
+  }
+  if (!grab()) { var n = 0; var iv = setInterval(function () { if (grab() || ++n > 20) clearInterval(iv); }, 1000); }
+  true;
+})();
+`;
+
+// onMessage handler for the login WebViews — persists a captured refresh
+// token. Safe to wire on any WebView that injects MSAL_RT_CAPTURE_JS.
+export async function handleLoginWebViewMessage(event) {
+  try {
+    const msg = JSON.parse(event?.nativeEvent?.data);
+    if (msg?.__msalRt && msg.secret && msg.tenantId && msg.clientId) {
+      await saveMsalRefreshToken({ secret: msg.secret, clientId: msg.clientId, tenantId: msg.tenantId });
+    }
+  } catch (_) {
+    // Non-RT message or parse error — ignore.
+  }
+}
 
 // Shared "did this WebView actually log us in?" detection, used by both the
 // visible LoginScreen and the hidden SessionRefreshWebView so the two paths

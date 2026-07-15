@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { LOGIN_URL, getUser } from '../api/doch1';
-import { useLoginDetection } from '../hooks/useLoginDetection';
+import { useLoginDetection, MSAL_RT_CAPTURE_JS, handleLoginWebViewMessage } from '../hooks/useLoginDetection';
 
 const REFRESH_TIMEOUT_MS = 30000;
 
@@ -59,6 +59,8 @@ export default function SessionRefreshWebView({ onSuccess, onFailure }) {
         source={{ uri: LOGIN_URL }}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
+        injectedJavaScript={MSAL_RT_CAPTURE_JS}
+        onMessage={handleLoginWebViewMessage}
         onNavigationStateChange={onNavigationStateChange}
         onLoadEnd={onNavigationStateChange}
         onError={() => settle(() => onFailure('load error'))}

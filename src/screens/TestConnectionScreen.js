@@ -1,13 +1,95 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { WebView } from 'react-native-webview';
 import CookieManager from '@preeternal/react-native-cookie-manager';
 import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, getLastReauthAttempt, COOKIE_DOMAIN, LOGIN_URL } from '../api/doch1';
 import { getLastAutoSubmitRun } from '../tasks/runAutoSubmit';
 import { colors, spacing, radius } from '../theme';
 
+// Injected into every top-level document the trace WebView loads (including
+// cross-domain SSO hops). Reports all fetch/XHR traffic and periodic
+// storage snapshots back over postMessage — this is the visibility a plain
+// headless fetch can never have, and it's how we find out what the SPA's JS
+// actually does to silently re-establish a session.
+const TRACE_INSTRUMENTATION_JS = `
+(function () {
+  function send(type, payload) {
+    try {
+      payload = payload || {};
+      payload.type = type;
+      window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+    } catch (e) {}
+  }
+  function keysOf(storage) {
+    var out = [];
+    try {
+      for (var i = 0; i < storage.length; i++) {
+        var k = storage.key(i);
+        out.push(k + ' (' + String(storage.getItem(k) || '').length + ' chars)');
+      }
+    } catch (e) {
+      out.push('unreadable: ' + String(e && e.message));
+    }
+    return out;
+  }
+  function snapshotStorage(label) {
+    send('storage', {
+      label: label,
+      url: location.href,
+      cookie: document.cookie,
+      localStorage: keysOf(window.localStorage),
+      sessionStorage: keysOf(window.sessionStorage),
+    });
+  }
+  var origFetch = window.fetch;
+  window.fetch = function (input, init) {
+    var url = (input && input.url) || String(input);
+    var method = (init && init.method) || (input && input.method) || 'GET';
+    return origFetch.apply(this, arguments).then(
+      function (res) {
+        send('fetch', { method: method, url: url, status: res.status, redirected: res.redirected, finalUrl: res.url });
+        return res;
+      },
+      function (err) {
+        send('fetch', { method: method, url: url, error: String(err) });
+        throw err;
+      }
+    );
+  };
+  var origOpen = XMLHttpRequest.prototype.open;
+  var origSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (method, url) {
+    this.__trace = { method: method, url: String(url) };
+    return origOpen.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.send = function () {
+    var xhr = this;
+    xhr.addEventListener('loadend', function () {
+      var t = xhr.__trace || {};
+      send('xhr', { method: t.method, url: t.url, status: xhr.status, responseURL: xhr.responseURL });
+    });
+    return origSend.apply(this, arguments);
+  };
+  snapshotStorage('document start');
+  window.addEventListener('load', function () { snapshotStorage('window load'); });
+  setTimeout(function () { snapshotStorage('after 5s'); }, 5000);
+  setTimeout(function () { snapshotStorage('after 15s'); }, 15000);
+  true;
+})();
+`;
+
+const originOf = (url) => {
+  const m = String(url || '').match(/^https?:\/\/[^/]+/);
+  return m ? m[0] : null;
+};
+
 export default function TestConnectionScreen({ navigation }) {
   const [log, setLog] = useState([]);
   const [running, setRunning] = useState(false);
+  const [tracing, setTracing] = useState(false);
+  const traceOriginsRef = useRef(new Set());
+  const traceAppCookieBeforeRef = useRef(null);
+  const traceLastNavRef = useRef('');
 
   const append = (line) => setLog((prev) => [...prev, line]);
 
@@ -224,10 +306,138 @@ export default function TestConnectionScreen({ navigation }) {
     }
   };
 
+  // --- Instrumented login trace ------------------------------------------
+  // Loads the portal in a real WebView while logging every top-level
+  // navigation (including cross-domain SSO hops — invisible to every earlier
+  // probe), every fetch/XHR the SPA makes, and storage snapshots. Afterward
+  // it dumps cookies for EACH domain seen, since CookieManager.get() is
+  // per-domain and the earlier "AppCookie is the only cookie" audit could
+  // only see one.prat.idf.il. Best run right after "Invalidate AppCookie
+  // only", to capture a genuine recovery in action.
+
+  const startTrace = async () => {
+    setLog([]);
+    traceOriginsRef.current = new Set();
+    traceLastNavRef.current = '';
+    const cookies = await CookieManager.get(COOKIE_DOMAIN);
+    traceAppCookieBeforeRef.current = cookies?.AppCookie?.value ?? null;
+    append('--- Instrumented login trace ---');
+    append('Tip: run "Invalidate AppCookie only" first to watch a genuine recovery.');
+    const before = traceAppCookieBeforeRef.current;
+    append(`AppCookie before: ${before ? `${before.slice(0, 16)}… (${before.length} chars)` : '(none)'}`);
+    append('Loading portal with fetch/XHR/storage instrumentation. Press "Stop trace" once the page settles.');
+    setTracing(true);
+  };
+
+  const stopTrace = async () => {
+    setTracing(false);
+    append('--- Trace stopped ---');
+    try {
+      await CookieManager.flush?.();
+    } catch (_) {}
+    const origins = Array.from(traceOriginsRef.current);
+    append(`Origins seen during trace: ${origins.join(', ') || '(none)'}`);
+    for (const origin of origins) {
+      try {
+        const cookies = await CookieManager.get(origin);
+        const names = Object.keys(cookies || {});
+        append(`Cookies for ${origin}: ${names.join(', ') || '(none)'}`);
+        names.forEach((name) => append(describeCookie(name, cookies[name])));
+      } catch (err) {
+        append(`Cookies for ${origin}: error (${err.message})`);
+      }
+    }
+    const after = await CookieManager.get(COOKIE_DOMAIN);
+    const appCookieAfter = after?.AppCookie?.value ?? null;
+    append(`AppCookie after: ${appCookieAfter ? `${appCookieAfter.slice(0, 16)}… (${appCookieAfter.length} chars)` : '(none)'}`);
+    append(`AppCookie changed during trace: ${appCookieAfter !== traceAppCookieBeforeRef.current}`);
+  };
+
+  const noteTraceUrl = (url) => {
+    const origin = originOf(url);
+    if (origin) traceOriginsRef.current.add(origin);
+  };
+
+  const onTraceNavStateChange = (navState) => {
+    const url = navState?.url || '';
+    noteTraceUrl(url);
+    const line = `[nav] ${url}${navState?.loading ? ' (loading)' : ''}`;
+    if (line !== traceLastNavRef.current) {
+      traceLastNavRef.current = line;
+      append(line);
+    }
+  };
+
+  const onTraceShouldStart = (request) => {
+    noteTraceUrl(request?.url);
+    append(`[nav→] ${request?.url}`);
+    return true;
+  };
+
+  const onTraceMessage = (event) => {
+    let msg;
+    try {
+      msg = JSON.parse(event?.nativeEvent?.data);
+    } catch (_) {
+      return;
+    }
+    if (msg.type === 'fetch' || msg.type === 'xhr') {
+      noteTraceUrl(msg.url);
+      if (msg.error) {
+        append(`[${msg.type}] ${msg.method} ${msg.url} → ERROR ${msg.error}`);
+      } else {
+        append(`[${msg.type}] ${msg.method} ${msg.url} → ${msg.status}${msg.redirected ? ` (redirected → ${msg.finalUrl})` : ''}`);
+      }
+    } else if (msg.type === 'storage') {
+      append(`[storage @ ${msg.label}] ${msg.url}`);
+      append(`  document.cookie: ${msg.cookie || '(empty)'}`);
+      append(`  localStorage: ${(msg.localStorage || []).join(', ') || '(empty)'}`);
+      append(`  sessionStorage: ${(msg.sessionStorage || []).join(', ') || '(empty)'}`);
+    }
+  };
+
+  // Exercises the REAL background worker path (TaskManager task via
+  // WorkManager), not just runAutoSubmit() on the JS thread. Debug builds
+  // only — the API rejects in production.
+  const triggerBackgroundWorker = async () => {
+    setLog([]);
+    setRunning(true);
+    try {
+      const BackgroundTask = require('expo-background-task');
+      append('Triggering the background task worker (debug builds only)...');
+      const ok = await BackgroundTask.triggerTaskWorkerForTestingAsync();
+      append(`triggered: ${ok}`);
+      append('Result lands in "Show last auto-submit run" once the worker finishes.');
+    } catch (err) {
+      append(`❌ Error: ${err.message}`);
+      append('(Only works in debug builds with native modules available.)');
+    } finally {
+      setRunning(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Test Connection</Text>
 
+      {tracing ? (
+        <>
+          <View style={styles.traceWebViewBox}>
+            <WebView
+              source={{ uri: LOGIN_URL }}
+              sharedCookiesEnabled
+              thirdPartyCookiesEnabled
+              injectedJavaScriptBeforeContentLoaded={TRACE_INSTRUMENTATION_JS}
+              onMessage={onTraceMessage}
+              onNavigationStateChange={onTraceNavStateChange}
+              onShouldStartLoadWithRequest={onTraceShouldStart}
+            />
+          </View>
+          <TouchableOpacity style={styles.button} onPress={stopTrace}>
+            <Text style={styles.buttonText}>Stop trace</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
       <ScrollView
         style={styles.buttonsScroll}
         contentContainerStyle={styles.buttonsContent}
@@ -272,7 +482,16 @@ export default function TestConnectionScreen({ navigation }) {
         <TouchableOpacity style={styles.secondaryButton} onPress={showLastAutoSubmitRun} disabled={running}>
           <Text style={styles.secondaryButtonText}>Show last auto-submit run</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={styles.secondaryButton} onPress={startTrace} disabled={running}>
+          <Text style={styles.secondaryButtonText}>Instrumented login trace</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.secondaryButton} onPress={triggerBackgroundWorker} disabled={running}>
+          <Text style={styles.secondaryButtonText}>Trigger background worker (debug)</Text>
+        </TouchableOpacity>
       </ScrollView>
+      )}
 
       <ScrollView style={styles.logBox}>
         <Text style={styles.logLine} selectable>
@@ -306,6 +525,14 @@ const styles = StyleSheet.create({
   secondaryButtonText: { color: colors.text, fontSize: 14 },
   buttonsScroll: { maxHeight: '38%', flexGrow: 0 },
   buttonsContent: { paddingBottom: spacing.xs },
+  traceWebViewBox: {
+    height: '35%',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    marginBottom: spacing.sm,
+  },
   logBox: {
     flex: 1,
     marginTop: spacing.md,

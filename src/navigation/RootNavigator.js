@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -13,6 +13,8 @@ import SettingsGeneralScreen from '../screens/SettingsGeneralScreen';
 import SettingsDevScreen from '../screens/SettingsDevScreen';
 import TestConnectionScreen from '../screens/TestConnectionScreen';
 import { getUser, refreshStatuses } from '../api/doch1';
+import { runAutoSubmitIfStale } from '../tasks/runAutoSubmit';
+import SessionRefreshWebView from '../components/SessionRefreshWebView';
 import { colors } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 
@@ -22,15 +24,32 @@ export default function RootNavigator() {
   const { accentColor } = useTheme();
   const [initialRoute, setInitialRoute] = useState(null);
   const [isCommander, setIsCommander] = useState(false);
+  const [silentRefreshing, setSilentRefreshing] = useState(false);
+
+  const onAuthenticated = useCallback((user) => {
+    setIsCommander(!!user?.isCommanderAuth);
+    setSilentRefreshing(false);
+    setInitialRoute('Home');
+    refreshStatuses().catch(() => {});
+    // Catch-up fill: with the session fresh, any reports the background task
+    // missed while AppCookie was dead get submitted right now.
+    runAutoSubmitIfStale().catch(() => {});
+  }, []);
 
   useEffect(() => {
     (async () => {
       const user = await getUser();
-      setIsCommander(!!user?.isCommanderAuth);
-      setInitialRoute(user?.isUserAuth ? 'Home' : 'Login');
-      if (user?.isUserAuth) refreshStatuses().catch(() => {});
+      if (user?.isUserAuth) {
+        onAuthenticated(user);
+      } else {
+        // Not authenticated — but per the session model in doch1.js the
+        // underlying login usually still lives (~2 weeks); only AppCookie
+        // (~5h) has died. Try the hidden-WebView refresh behind the splash
+        // before falling back to the visible Login screen.
+        setSilentRefreshing(true);
+      }
     })();
-  }, []);
+  }, [onAuthenticated]);
 
   const navTheme = {
     ...DarkTheme,
@@ -55,6 +74,15 @@ export default function RootNavigator() {
         }}
       >
         <ActivityIndicator color={accentColor} size="large" />
+        {silentRefreshing && (
+          <SessionRefreshWebView
+            onSuccess={onAuthenticated}
+            onFailure={() => {
+              setSilentRefreshing(false);
+              setInitialRoute('Login');
+            }}
+          />
+        )}
       </View>
     );
   }

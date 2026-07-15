@@ -60,7 +60,20 @@ export async function clearCookies() {
 // makes a headless request silently recover a dead AppCookie — the
 // server-side behavior simply doesn't vary by cookie state at this
 // endpoint. The only way to get a fresh AppCookie once it's dead is a real
-// login through LoginScreen.js's WebView.
+// login through a WebView (browser engine executing the portal's JS).
+//
+// The app leans into that instead of fighting it:
+// - On launch with a dead session, RootNavigator mounts the hidden
+//   SessionRefreshWebView (components/SessionRefreshWebView.js) behind the
+//   splash — the same silent WebView login, minus the screen. The visible
+//   LoginScreen is only the fallback for a genuinely-expired (~2-week)
+//   login.
+// - After any successful auth, a debounced runAutoSubmitIfStale() catch-up
+//   fills the week, so background-task failures while the app was closed
+//   cost nothing once the app is opened.
+// - Background fires still fail whenever they land >~5h after the last app
+//   open; that's expected, and the task only notifies when the filled
+//   window is actually about to run out (see tasks/runAutoSubmit.js).
 let reauthInFlight = null;
 let reauthCooldownUntil = 0;
 let lastReauthAttempt = null;

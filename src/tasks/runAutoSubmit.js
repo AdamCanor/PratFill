@@ -6,10 +6,21 @@ import { getUpcomingDates, monthsToQuery, normalizeDate } from '../utils/dates';
 export const LAST_RUN_KEY = 'doch1_auto_submit_last_run';
 const COVERAGE_KEY = 'doch1_auto_submit_coverage';
 const AUTH_NOTIFIED_KEY = 'doch1_auto_submit_auth_notified';
+const SUCCESS_NOTIFIED_KEY = 'doch1_auto_submit_success_notified';
 
 export async function getLastAutoSubmitRun() {
   const raw = await AsyncStorage.getItem(LAST_RUN_KEY);
   return raw ? JSON.parse(raw) : null;
+}
+
+// Whether the user has the feature turned on with a preset selected. The
+// background worker checks this before doing anything (refresh included) so a
+// disabled config never touches the network or fires notifications.
+export async function isAutoSubmitEnabled() {
+  const raw = await AsyncStorage.getItem('doch1_settings');
+  const settings = raw ? JSON.parse(raw) : null;
+  const { enabled, presetId } = settings?.autoSubmit ?? {};
+  return Boolean(enabled && presetId);
 }
 
 async function recordLastRun(result) {
@@ -42,6 +53,32 @@ export async function shouldNotifyAuthFailure() {
 
 export async function markAuthFailureNotified() {
   await AsyncStorage.setItem(AUTH_NOTIFIED_KEY, new Date().toISOString());
+}
+
+// A genuine long-login death should always be surfaced — but still only once
+// per death, not on every ~daily fire. The worker uses this for the
+// "attempted a real refresh and it failed" case, where coverage is irrelevant
+// (the user must re-login regardless of how many days are still filled).
+export async function hasNotifiedAuthFailure() {
+  return Boolean(await AsyncStorage.getItem(AUTH_NOTIFIED_KEY));
+}
+
+// Success-notification cadence. Because a new future day unlocks daily, a
+// successful run fills a new day almost every day — so notifying on every
+// fill ('daily') is effectively a daily heartbeat, while 'weekly' collapses
+// that to at most one success notification per 7 days. Death notifications
+// are governed separately and always fire.
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function shouldNotifySuccess(mode) {
+  if (mode !== 'weekly') return true; // 'daily' (default): every fill
+  const raw = await AsyncStorage.getItem(SUCCESS_NOTIFIED_KEY);
+  if (!raw) return true;
+  return Date.now() - Date.parse(raw) >= WEEK_MS;
+}
+
+async function markSuccessNotified() {
+  await AsyncStorage.setItem(SUCCESS_NOTIFIED_KEY, new Date().toISOString());
 }
 
 // Foreground catch-up: run auto-submit unless a real (non-skipped) run
@@ -108,7 +145,9 @@ export async function runAutoSubmit() {
       count++;
     }
 
-    if (count > 0) {
+    // Only notify when we actually filled something (quiet-by-default), and
+    // only as often as the user's chosen cadence allows.
+    if (count > 0 && (await shouldNotifySuccess(settings.autoSubmit?.successNotify))) {
       await Notifications.scheduleNotificationAsync({
         content: {
           title: 'PratFill',
@@ -116,6 +155,7 @@ export async function runAutoSubmit() {
         },
         trigger: null,
       });
+      await markSuccessNotified();
     }
 
     // Reaching here means every upcoming day with preset defaults is now

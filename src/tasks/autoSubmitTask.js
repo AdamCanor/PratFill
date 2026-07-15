@@ -1,5 +1,11 @@
-import { AuthError } from '../api/doch1';
-import { runAutoSubmit, shouldNotifyAuthFailure, markAuthFailureNotified } from './runAutoSubmit';
+import { AuthError, refreshAppCookie } from '../api/doch1';
+import {
+  runAutoSubmit,
+  shouldNotifyAuthFailure,
+  markAuthFailureNotified,
+  hasNotifiedAuthFailure,
+  isAutoSubmitEnabled,
+} from './runAutoSubmit';
 
 export const TASK_NAME = 'auto-submit-reports';
 export { runAutoSubmit };
@@ -9,28 +15,63 @@ try {
   const BackgroundTask = require('expo-background-task');
   const Notifications = require('expo-notifications');
 
+  async function notifyReloginNeeded() {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'PratFill — נדרשת התחברות',
+        body: 'פג תוקף ההתחברות. פתח את האפליקציה כדי לחדש.',
+      },
+      trigger: null,
+    });
+  }
+
+  // The autonomous daily flow: get a working session on our own (refreshing a
+  // dead AppCookie headlessly if the mechanism is wired up), then fill the
+  // week — all without the user opening the app. runAutoSubmit owns the
+  // *success* notification (gated by the user's daily/weekly setting); the
+  // worker owns the *death* notification.
   TaskManager.defineTask(TASK_NAME, async () => {
     try {
-      const result = await runAutoSubmit();
-      if (result.skipped) return BackgroundTask.BackgroundTaskResult.Success;
-      return BackgroundTask.BackgroundTaskResult.Success;
-    } catch (e) {
-      if (e instanceof AuthError) {
-        // Per the session model documented in doch1.js, AppCookie dies ~5h
-        // after every login and no headless request can revive it, so a
-        // background AuthError is the expected state between app opens —
-        // not itself an emergency. Opening the app recovers silently
-        // (hidden-WebView refresh + catch-up run), so only nag when the
-        // filled window is about to run out, and only once per
-        // cookie-death.
+      // Do nothing (no network, no notifications) when the user hasn't
+      // enabled the feature.
+      if (!(await isAutoSubmitEnabled())) {
+        return BackgroundTask.BackgroundTaskResult.Success;
+      }
+
+      const session = await refreshAppCookie();
+
+      if (session.ok) {
+        await runAutoSubmit();
+        return BackgroundTask.BackgroundTaskResult.Success;
+      }
+
+      // Couldn't establish a session.
+      if (session.attempted) {
+        // A real headless refresh was tried and failed — the long-lived
+        // login is genuinely dead and only a manual re-login can recover it.
+        // Always surface this, but once per death (cleared on next success).
+        if (!(await hasNotifiedAuthFailure())) {
+          await notifyReloginNeeded();
+          await markAuthFailureNotified();
+        }
+      } else {
+        // No headless refresh wired up yet (the portal's silent-refresh
+        // mechanism is still being identified — see refreshAppCookie in
+        // doch1.js). We can't tell a recoverable short-cookie death from a
+        // real one here, so fall back to the conservative coverage-based
+        // throttle instead of nagging every fire.
         if (await shouldNotifyAuthFailure()) {
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title: 'PratFill — נדרשת התחברות',
-              body: 'פג תוקף ההתחברות. פתח את האפליקציה כדי לחדש.',
-            },
-            trigger: null,
-          });
+          await notifyReloginNeeded();
+          await markAuthFailureNotified();
+        }
+      }
+      return BackgroundTask.BackgroundTaskResult.Failed;
+    } catch (e) {
+      // AuthError thrown mid-submit despite a fresh session — treat like a
+      // death, throttled the same conservative way.
+      if (e instanceof AuthError) {
+        if (await shouldNotifyAuthFailure()) {
+          await notifyReloginNeeded();
           await markAuthFailureNotified();
         }
         return BackgroundTask.BackgroundTaskResult.Failed;
@@ -43,11 +84,14 @@ try {
 }
 
 // expo-background-task takes minimumInterval in MINUTES (floor 15, default
-// 12h) — the previous 15 * 60 here meant 900 minutes (~15h), written as if
-// the unit were seconds. AppCookie is only valid ~5h after each app open, so
-// fires must be frequent enough to land inside that window; the OS treats
-// this as a minimum, not a schedule.
-const MINIMUM_INTERVAL_MINUTES = 120;
+// 12h) — a previous 15 * 60 here meant 900 minutes (~15h), written as if the
+// unit were seconds. The goal is one autonomous fill per day; because
+// WorkManager defers work under Doze, we ask for ~6h so at least one fire
+// reliably lands each day. Runs are idempotent (already-reported days are
+// skipped) and cheap, and notification cadence is decoupled from run cadence
+// (see the daily/weekly success setting), so more frequent fires don't mean
+// more notifications. The OS treats this as a minimum, not a schedule.
+const MINIMUM_INTERVAL_MINUTES = 360;
 const REGISTERED_INTERVAL_KEY = 'doch1_auto_submit_registered_interval';
 
 export async function registerAutoSubmitTask() {

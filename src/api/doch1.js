@@ -62,18 +62,28 @@ export async function clearCookies() {
 // endpoint. The only way to get a fresh AppCookie once it's dead is a real
 // login through a WebView (browser engine executing the portal's JS).
 //
-// The app leans into that instead of fighting it:
+// The goal is an AUTONOMOUS daily background fill: the worker gets a fresh
+// AppCookie on its own and keeps the week filled without the user ever
+// opening the app, for as long as the ~monthly login survives. That hinges
+// on refreshAppCookie() below being able to mint a fresh AppCookie headlessly
+// — which needs the portal's real silent-refresh mechanism, still to be
+// identified via the "Instrumented login trace" in TestConnectionScreen.
+//
+// Supporting pieces already in place:
+// - refreshAppCookie() is the seam the background worker calls before every
+//   submit. Its refresh body is a no-op until the trace identifies the
+//   mechanism (then Path A: replicate the HTTP call the SPA's JS makes, or
+//   Path B: drive a native background WebView).
 // - On launch with a dead session, RootNavigator mounts the hidden
 //   SessionRefreshWebView (components/SessionRefreshWebView.js) behind the
-//   splash — the same silent WebView login, minus the screen. The visible
-//   LoginScreen is only the fallback for a genuinely-expired (~2-week)
-//   login.
-// - After any successful auth, a debounced runAutoSubmitIfStale() catch-up
-//   fills the week, so background-task failures while the app was closed
-//   cost nothing once the app is opened.
-// - Background fires still fail whenever they land >~5h after the last app
-//   open; that's expected, and the task only notifies when the filled
-//   window is actually about to run out (see tasks/runAutoSubmit.js).
+//   splash — a real WebView login, minus the screen. This is a SECONDARY
+//   safety net (and the credential-capture point for Path A), not the
+//   feature itself. The visible LoginScreen is the last-resort fallback for a
+//   genuinely-expired (~monthly) login.
+// - Until the headless refresh lands, background fires still fail whenever
+//   they land on a dead AppCookie; the worker only notifies "re-login" when
+//   the filled window is actually about to run out (see tasks/runAutoSubmit.js
+//   and tasks/autoSubmitTask.js).
 let reauthInFlight = null;
 let reauthCooldownUntil = 0;
 let lastReauthAttempt = null;
@@ -292,6 +302,38 @@ export async function getUser() {
   });
   if (!res.ok) return { isUserAuth: false, isCommanderAuth: false, error: null };
   return res.json();
+}
+
+// Ensure there's a working session, refreshing a dead AppCookie headlessly if
+// possible. This is the seam the whole autonomous-daily background feature
+// hangs on: the worker calls it before every submit so the week stays filled
+// without the user ever opening the app.
+//
+// Returns { ok, attempted }:
+//   ok        — we now have a live session (getUser confirms it).
+//   attempted — whether a real headless refresh was actually tried. This lets
+//               the caller tell a genuine long-login death (attempted && !ok
+//               → notify "re-login required") apart from "no refresh mechanism
+//               wired up yet" (!attempted && !ok → stay quiet / fall back to a
+//               coverage-based throttle).
+//
+// The refresh BODY is deliberately still a no-op: a plain headless fetch
+// cannot revive a dead AppCookie for this site (proven — see the session
+// model above), and the mechanism a real browser uses is not yet identified.
+// The "Instrumented login trace" tool in TestConnectionScreen exists to
+// capture it; once known, this is where Path A (replicate the HTTP call[s]
+// the SPA's JS makes) or Path B (drive a native background WebView) plugs in,
+// setting attempted:true.
+export async function refreshAppCookie() {
+  try {
+    const user = await getUser();
+    if (user?.isUserAuth) return { ok: true, attempted: false };
+  } catch (_) {
+    // Network hiccup — fall through and report we couldn't establish one.
+  }
+
+  // >>> Step 2 (post-trace) implements the real headless refresh here. <<<
+  return { ok: false, attempted: false, reason: 'refresh-not-implemented' };
 }
 
 export async function getAllFilterStatuses() {

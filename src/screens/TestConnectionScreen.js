@@ -52,20 +52,35 @@ export default function TestConnectionScreen({ navigation }) {
   const onInvalidateAppCookie = async () => {
     setLog([]);
     try {
-      // Not using `expires` in the past here: this library only writes an
-      // Expires attribute when the computed maxAge > 0, so a past date is
-      // silently dropped and nothing actually expires. Overwriting the
-      // value instead reliably breaks the session server-side without
-      // touching any other cookie.
-      await CookieManager.set(COOKIE_DOMAIN, {
+      // A plain overwrite silently didn't take (turned out to still match
+      // the original cookie's actual scope, not ours) — clear it outright
+      // first and verify it's really gone before setting a garbage value,
+      // instead of trusting an overwrite that may just create a second,
+      // differently-scoped cookie the get() call never surfaces.
+      const cleared = await CookieManager.clearByName(COOKIE_DOMAIN, 'AppCookie');
+      append(`clearByName result: ${cleared}`);
+      await CookieManager.flush?.();
+      const presentAfterClear = await hasAppCookie();
+      append(`AppCookie present after clear (expect false): ${presentAfterClear}`);
+      if (presentAfterClear) {
+        append('⚠️ Clear did not remove it — the value below is still the real cookie.');
+      }
+
+      const setOk = await CookieManager.set(COOKIE_DOMAIN, {
         name: 'AppCookie',
         value: 'invalidated-for-testing',
+        path: '/',
       });
+      append(`set() result: ${setOk}`);
       await CookieManager.flush?.();
-      append('AppCookie value overwritten — other cookies untouched.');
-      append(`AppCookie present (still, expected): ${await hasAppCookie()}`);
-      append('Now tap "Run test" — it should transparently recover via');
-      append('attemptSilentReauth() instead of showing an AuthError.');
+      const cookies = await CookieManager.get(COOKIE_DOMAIN);
+      const nowValue = cookies?.AppCookie?.value;
+      append(`AppCookie value now (${nowValue?.length ?? 0} chars): ${nowValue}`);
+      if (nowValue === 'invalidated-for-testing') {
+        append('✅ Genuinely invalidated this time.');
+      } else {
+        append('❌ Still not overwritten — this is the real cookie, not our garbage value.');
+      }
     } catch (err) {
       append(`❌ Error: ${err.message}`);
     }

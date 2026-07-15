@@ -69,7 +69,7 @@ export default function SettingsDevScreen({ navigation }) {
           activeOpacity={0.7}
         >
           <View style={{ flex: 1, marginEnd: spacing.sm }}>
-            <Text style={styles.rowLabel}>הרץ עכשיו</Text>
+            <Text style={styles.rowLabel}>הרץ דיווח אוטומטי עכשיו</Text>
             <Text style={styles.rowMeta}>{describeLastRun(lastRun)}</Text>
           </View>
           {runningNow ? (

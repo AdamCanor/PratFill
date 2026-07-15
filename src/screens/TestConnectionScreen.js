@@ -160,52 +160,56 @@ export default function TestConnectionScreen({ navigation }) {
     <View style={styles.container}>
       <Text style={styles.title}>Test Connection</Text>
 
-      <TouchableOpacity style={styles.button} onPress={runTest} disabled={running}>
-        {running ? (
-          <ActivityIndicator color={colors.accentText} />
-        ) : (
-          <Text style={styles.buttonText}>Run test</Text>
-        )}
-      </TouchableOpacity>
+      <ScrollView
+        style={styles.buttonsScroll}
+        contentContainerStyle={styles.buttonsContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <TouchableOpacity style={styles.button} onPress={runTest} disabled={running}>
+          {running ? (
+            <ActivityIndicator color={colors.accentText} />
+          ) : (
+            <Text style={styles.buttonText}>Run connection test (fetch reports)</Text>
+          )}
+        </TouchableOpacity>
 
-      <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('Login')}>
-        <Text style={styles.secondaryButtonText}>Go to Login</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('Login')}>
+          <Text style={styles.secondaryButtonText}>Go to Login</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity style={styles.secondaryButton} onPress={onClearCookies}>
-        <Text style={styles.secondaryButtonText}>Clear cookies</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={onClearCookies}>
+          <Text style={styles.secondaryButtonText}>Clear cookies</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity style={styles.secondaryButton} onPress={listCookies}>
-        <Text style={styles.secondaryButtonText}>List all cookies</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={listCookies}>
+          <Text style={styles.secondaryButtonText}>List all cookies</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity style={styles.secondaryButton} onPress={onInvalidateAppCookie}>
-        <Text style={styles.secondaryButtonText}>Invalidate AppCookie only</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={onInvalidateAppCookie}>
+          <Text style={styles.secondaryButtonText}>Invalidate AppCookie only</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity style={styles.secondaryButton} onPress={runReauthTest} disabled={running}>
-        <Text style={styles.secondaryButtonText}>Test silent re-auth</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={runReauthTest} disabled={running}>
+          <Text style={styles.secondaryButtonText}>Test silent re-auth</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity style={styles.secondaryButton} onPress={inspectLoginPage} disabled={running}>
-        <Text style={styles.secondaryButtonText}>Inspect login page response</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={inspectLoginPage} disabled={running}>
+          <Text style={styles.secondaryButtonText}>Inspect login page response</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity style={styles.secondaryButton} onPress={inspectGetUser} disabled={running}>
-        <Text style={styles.secondaryButtonText}>Inspect getUser response</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={inspectGetUser} disabled={running}>
+          <Text style={styles.secondaryButtonText}>Inspect getUser response</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity style={styles.secondaryButton} onPress={showLastAutoSubmitRun} disabled={running}>
-        <Text style={styles.secondaryButtonText}>Show last auto-submit run</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={showLastAutoSubmitRun} disabled={running}>
+          <Text style={styles.secondaryButtonText}>Show last auto-submit run</Text>
+        </TouchableOpacity>
+      </ScrollView>
 
       <ScrollView style={styles.logBox}>
-        {log.map((line, i) => (
-          <Text key={i} style={styles.logLine} selectable>
-            {line}
-          </Text>
-        ))}
+        <Text style={styles.logLine} selectable>
+          {log.join('\n')}
+        </Text>
       </ScrollView>
     </View>
   );
@@ -232,6 +236,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   secondaryButtonText: { color: colors.text, fontSize: 14 },
+  buttonsScroll: { maxHeight: '38%', flexGrow: 0 },
+  buttonsContent: { paddingBottom: spacing.xs },
   logBox: {
     flex: 1,
     marginTop: spacing.md,
@@ -245,6 +251,5 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     fontFamily: 'monospace',
-    marginBottom: spacing.xs,
   },
 });

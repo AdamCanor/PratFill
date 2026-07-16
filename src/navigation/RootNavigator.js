@@ -13,7 +13,6 @@ import SettingsGeneralScreen from '../screens/SettingsGeneralScreen';
 import SettingsDevScreen from '../screens/SettingsDevScreen';
 import TestConnectionScreen from '../screens/TestConnectionScreen';
 import { getUser, refreshStatuses } from '../api/doch1';
-import { runAutoSubmitIfStale } from '../tasks/runAutoSubmit';
 import SessionRefreshWebView from '../components/SessionRefreshWebView';
 import { colors } from '../theme';
 import { useTheme } from '../context/ThemeContext';
@@ -31,9 +30,9 @@ export default function RootNavigator() {
     setSilentRefreshing(false);
     setInitialRoute('Home');
     refreshStatuses().catch(() => {});
-    // Catch-up fill: with the session fresh, any reports the background task
-    // missed while AppCookie was dead get submitted right now.
-    runAutoSubmitIfStale().catch(() => {});
+    // Auto-submit is background-only by design — opening the app never
+    // triggers a submit. In the foreground the user presses the fill button
+    // themselves; only the background worker fills on its own.
   }, []);
 
   useEffect(() => {

@@ -81,33 +81,6 @@ async function markSuccessNotified() {
   await AsyncStorage.setItem(SUCCESS_NOTIFIED_KEY, new Date().toISOString());
 }
 
-// Foreground catch-up: run auto-submit unless a real (non-skipped) run
-// succeeded recently. Called on app launch and on foreground transitions —
-// combined with the silent session refresh, this is what makes "open the app
-// once in a while" enough to keep the week filled even when every background
-// fire lands on a dead cookie.
-const STALE_AFTER_MS = 6 * 60 * 60 * 1000;
-let catchUpInFlight = null;
-
-export async function runAutoSubmitIfStale() {
-  // The launch auth flow and the AppState listener can both call this within
-  // moments of each other; overlapping runs would race the reported-dates
-  // check and double-insert. Share one in-flight run instead.
-  if (catchUpInFlight) return catchUpInFlight;
-  catchUpInFlight = (async () => {
-    const last = await getLastAutoSubmitRun();
-    if (last && !last.error && !last.skipped && Date.now() - Date.parse(last.at) < STALE_AFTER_MS) {
-      return null;
-    }
-    return runAutoSubmit();
-  })();
-  try {
-    return await catchUpInFlight;
-  } finally {
-    catchUpInFlight = null;
-  }
-}
-
 export async function runAutoSubmit() {
   const raw = await AsyncStorage.getItem('doch1_settings');
   const settings = raw ? JSON.parse(raw) : null;

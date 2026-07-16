@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { WebView } from 'react-native-webview';
 import CookieManager from '@preeternal/react-native-cookie-manager';
-import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, getLastReauthAttempt, refreshAppCookie, getMsalRefreshToken, COOKIE_DOMAIN, LOGIN_URL } from '../api/doch1';
+import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, getLastReauthAttempt, refreshAppCookie, getMsalRefreshToken, saveMsalRefreshToken, COOKIE_DOMAIN, LOGIN_URL } from '../api/doch1';
 import { getLastAutoSubmitRun } from '../tasks/runAutoSubmit';
 import { colors, spacing, radius } from '../theme';
 
@@ -67,6 +67,40 @@ const TRACE_INSTRUMENTATION_JS = `
     });
   }
 
+  // Look for MSAL's Azure refresh token in localStorage and report it. The
+  // raw secret rides in this message (WebView->RN postMessage never leaves
+  // the device) so the screen can persist it for real use; the log line
+  // built from this message must only ever show length, never the secret
+  // itself.
+  var rtReported = false;
+  function grabRt() {
+    if (rtReported) return true;
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k.indexOf('-refreshtoken-') >= 0) {
+          var raw = localStorage.getItem(k);
+          var v;
+          try { v = JSON.parse(raw); } catch (e) { v = null; }
+          if (v && v.secret) {
+            var tid = '';
+            if (v.homeAccountId && v.homeAccountId.indexOf('.') >= 0) tid = v.homeAccountId.split('.')[1];
+            rtReported = true;
+            send('rtcapture', {
+              found: true, key: k, keyLen: raw ? raw.length : 0,
+              parsedKeys: Object.keys(v).join(','),
+              clientId: v.clientId || '', tenantId: tid, homeAccountId: v.homeAccountId || '',
+              secretLen: v.secret.length, secret: v.secret,
+            });
+            return true;
+          }
+          send('rtcapture', { found: false, key: k, keyLen: raw ? raw.length : 0, reason: 'no .secret or unparseable', parsedKeys: v ? Object.keys(v).join(',') : '(parse failed)' });
+        }
+      }
+    } catch (e) { send('rtcapture', { found: false, reason: 'exception: ' + String(e && e.message) }); }
+    return false;
+  }
+
   var origFetch = window.fetch;
   window.fetch = function (input, init) {
     var url = (input && input.url) || String(input);
@@ -129,9 +163,18 @@ const TRACE_INSTRUMENTATION_JS = `
   };
 
   snapshotStorage('document start');
-  window.addEventListener('load', function () { snapshotStorage('window load'); });
-  setTimeout(function () { snapshotStorage('after 5s'); }, 5000);
-  setTimeout(function () { snapshotStorage('after 15s'); }, 15000);
+  window.addEventListener('load', function () { snapshotStorage('window load'); grabRt(); });
+  setTimeout(function () { snapshotStorage('after 5s'); grabRt(); }, 5000);
+  setTimeout(function () { snapshotStorage('after 15s'); grabRt(); }, 15000);
+  // Also poll frequently right after the redirect/token-exchange window,
+  // independent of the storage-snapshot cadence — this is what we actually
+  // rely on in production (useLoginDetection's capture), so proving it here
+  // proves that mechanism too.
+  var rtPollN = 0;
+  var rtPoll = setInterval(function () {
+    if (grabRt() || ++rtPollN > 20) clearInterval(rtPoll);
+  }, 1000);
+  if (!rtReported) grabRt();
   true;
 })();
 `;
@@ -432,11 +475,34 @@ export default function TestConnectionScreen({ navigation }) {
     return true;
   };
 
-  const onTraceMessage = (event) => {
+  const onTraceMessage = async (event) => {
     let msg;
     try {
       msg = JSON.parse(event?.nativeEvent?.data);
     } catch (_) {
+      return;
+    }
+    if (msg.type === 'rtcapture') {
+      // Never log msg.secret — only length/metadata. This is the same
+      // localStorage lookup useLoginDetection's capture does in production;
+      // running it here proves whether the extraction logic itself works,
+      // independent of LoginScreen's WebView lifecycle.
+      if (msg.found) {
+        append(`[rt capture] FOUND key=${msg.key} (${msg.keyLen} chars) fields=[${msg.parsedKeys}]`);
+        append(`[rt capture] clientId=${msg.clientId} tenantId=${msg.tenantId} secretLen=${msg.secretLen}`);
+        if (msg.secret && msg.clientId && msg.tenantId) {
+          try {
+            await saveMsalRefreshToken({ secret: msg.secret, clientId: msg.clientId, tenantId: msg.tenantId });
+            append('✅ Saved to AsyncStorage — "Test headless refresh" should now find it.');
+          } catch (err) {
+            append(`❌ Failed to save: ${err.message}`);
+          }
+        } else {
+          append('⚠️ Found the key but missing clientId/tenantId/secret — cannot save. See parsedKeys above.');
+        }
+      } else {
+        append(`[rt capture] not found yet${msg.key ? ` (key=${msg.key}, ${msg.reason || ''})` : ` (${msg.reason || 'no -refreshtoken- key seen'})`}`);
+      }
       return;
     }
     if (msg.type === 'fetch' || msg.type === 'xhr') {

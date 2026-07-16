@@ -11,6 +11,14 @@ export const LOGGED_IN_PATH_HINTS = ['/hp', '/secondaries', '/calendar', '/prima
 // own exchange completes, so poll briefly. The token never leaves the device
 // — it's postMessage'd to RN and stored in AsyncStorage, mirroring where MSAL
 // itself keeps it (localStorage).
+//
+// Must be injected via `injectedJavaScriptBeforeContentLoaded`, not
+// `injectedJavaScript` — the latter is only guaranteed to fire once, on the
+// very first page load, and does not reliably re-run across the SPA's
+// subsequent navigations. `injectedJavaScriptBeforeContentLoaded` re-fires on
+// every top-level navigation (confirmed reliable — it's what
+// TestConnectionScreen's instrumented trace uses, and that trace is what
+// proved this exact localStorage key/shape in the first place).
 export const MSAL_RT_CAPTURE_JS = `
 (function () {
   function grab() {

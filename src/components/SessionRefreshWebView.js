@@ -59,7 +59,7 @@ export default function SessionRefreshWebView({ onSuccess, onFailure }) {
         source={{ uri: LOGIN_URL }}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
-        injectedJavaScript={MSAL_RT_CAPTURE_JS}
+        injectedJavaScriptBeforeContentLoaded={MSAL_RT_CAPTURE_JS}
         onMessage={handleLoginWebViewMessage}
         onNavigationStateChange={onNavigationStateChange}
         onLoadEnd={onNavigationStateChange}

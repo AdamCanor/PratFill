@@ -23,6 +23,7 @@ export default function SettingsGeneralScreen({ navigation }) {
   const styles = React.useMemo(() => makeStyles(accentColor, accentTextColor), [accentColor, accentTextColor]);
 
   const [commanderMode, setCommanderMode] = useState(false);
+  const [devSettingsEnabled, setDevSettingsEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
@@ -34,6 +35,7 @@ export default function SettingsGeneralScreen({ navigation }) {
     (async () => {
       const s = await getSettings();
       if (s?.commanderMode !== undefined) setCommanderMode(s.commanderMode);
+      if (s?.devSettingsEnabled !== undefined) setDevSettingsEnabled(s.devSettingsEnabled);
     })();
   }, []);
 
@@ -62,7 +64,7 @@ export default function SettingsGeneralScreen({ navigation }) {
   const onSave = async () => {
     setSaving(true);
     const current = await getSettings();
-    await saveSettings({ ...current, commanderMode });
+    await saveSettings({ ...current, commanderMode, devSettingsEnabled });
     setSaving(false);
     navigation.goBack();
   };
@@ -81,6 +83,20 @@ export default function SettingsGeneralScreen({ navigation }) {
           <View style={{ flex: 1, marginEnd: spacing.sm }}>
             <Text style={styles.rowLabel}>מצב מפקד</Text>
             <Text style={styles.rowMeta}>הצג לשונית ניהול חיילים</Text>
+          </View>
+        </View>
+
+        <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>כלי פיתוח</Text>
+        <View style={styles.toggleRow}>
+          <Switch
+            value={devSettingsEnabled}
+            onValueChange={setDevSettingsEnabled}
+            trackColor={{ false: colors.border, true: accentColor + '88' }}
+            thumbColor={devSettingsEnabled ? accentColor : colors.textMuted}
+          />
+          <View style={{ flex: 1, marginEnd: spacing.sm }}>
+            <Text style={styles.rowLabel}>הצג הגדרות פיתוח</Text>
+            <Text style={styles.rowMeta}>הצג את דף בדיקת החיבור בתפריט ההגדרות</Text>
           </View>
         </View>
 

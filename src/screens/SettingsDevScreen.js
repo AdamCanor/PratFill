@@ -37,6 +37,7 @@ export default function SettingsDevScreen({ navigation }) {
 
   const [runningNow, setRunningNow] = useState(false);
   const [lastRun, setLastRun] = useState(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -68,7 +69,7 @@ export default function SettingsDevScreen({ navigation }) {
           activeOpacity={0.7}
         >
           <View style={{ flex: 1, marginEnd: spacing.sm }}>
-            <Text style={styles.rowLabel}>הרץ עכשיו</Text>
+            <Text style={styles.rowLabel}>הרץ דיווח אוטומטי עכשיו</Text>
             <Text style={styles.rowMeta}>{describeLastRun(lastRun)}</Text>
           </View>
           {runningNow ? (
@@ -77,6 +78,28 @@ export default function SettingsDevScreen({ navigation }) {
             <MaterialCommunityIcons name="play-circle-outline" size={24} color={accentColor} />
           )}
         </TouchableOpacity>
+
+        {lastRun?.diagnostics && (
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => setShowDiagnostics((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <View style={{ flex: 1, marginEnd: spacing.sm }}>
+              <Text style={styles.rowLabel}>פרטי אבחון להרצה האחרונה</Text>
+              {showDiagnostics && (
+                <Text style={styles.diagnosticsText} selectable>
+                  {JSON.stringify(lastRun.diagnostics, null, 2)}
+                </Text>
+              )}
+            </View>
+            <MaterialCommunityIcons
+              name={showDiagnostics ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={colors.textMuted}
+            />
+          </TouchableOpacity>
+        )}
 
         <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>אבחון</Text>
         <TouchableOpacity
@@ -122,4 +145,10 @@ const makeStyles = (accent) => StyleSheet.create({
   },
   rowLabel: { color: colors.text, fontSize: 15, fontWeight: '600' },
   rowMeta: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  diagnosticsText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontFamily: 'monospace',
+    marginTop: spacing.xs,
+  },
 });

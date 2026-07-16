@@ -1,44 +1,27 @@
 import React, { useRef, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { WebView } from 'react-native-webview';
-import CookieManager from '@preeternal/react-native-cookie-manager';
 import { colors, spacing } from '../theme';
-import { LOGIN_URL, COOKIE_DOMAIN } from '../api/doch1';
-
-// Pages that only render once the AppCookie session is established.
-const LOGGED_IN_PATH_HINTS = ['/hp', '/secondaries', '/calendar', '/primaries'];
+import { LOGIN_URL } from '../api/doch1';
+import { useLoginDetection, MSAL_RT_CAPTURE_JS, handleLoginWebViewMessage } from '../hooks/useLoginDetection';
 
 export default function LoginScreen({ navigation }) {
   const webviewRef = useRef(null);
   const [checking, setChecking] = useState(false);
   const [status, setStatus] = useState('ממתין להתחברות...');
 
-  const checkCookie = useCallback(async () => {
-    if (checking) return;
-    setChecking(true);
-    try {
-      const cookies = await CookieManager.get(COOKIE_DOMAIN);
-      if (cookies && cookies.AppCookie && cookies.AppCookie.value) {
-        setStatus('התחברות הצליחה');
-        navigation.replace('Home');
-        return;
-      }
-    } finally {
-      setChecking(false);
-    }
-  }, [checking, navigation]);
-
-  const onNavigationStateChange = useCallback(
-    (navState) => {
-      const url = navState.url || '';
-      const matchesLoggedIn = LOGGED_IN_PATH_HINTS.some((p) => url.includes(p));
-      if (matchesLoggedIn) {
-        setStatus('מאמת חיבור...');
-        checkCookie();
-      }
+  const { onNavigationStateChange } = useLoginDetection({
+    onLoggedInPageSeen: () => {
+      setStatus('מאמת חיבור...');
+      setChecking(true);
     },
-    [checkCookie]
-  );
+    onCheckSettled: () => setChecking(false),
+    onAuthenticated: useCallback(() => {
+      setChecking(false);
+      setStatus('התחברות הצליחה');
+      navigation.replace('Home');
+    }, [navigation]),
+  });
 
   return (
     <View style={styles.container}>
@@ -51,6 +34,8 @@ export default function LoginScreen({ navigation }) {
         source={{ uri: LOGIN_URL }}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
+        injectedJavaScriptBeforeContentLoaded={MSAL_RT_CAPTURE_JS}
+        onMessage={handleLoginWebViewMessage}
         onNavigationStateChange={onNavigationStateChange}
         onLoadEnd={onNavigationStateChange}
         startInLoadingState

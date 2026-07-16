@@ -90,6 +90,8 @@ git commit -m "Update android/ after adding <package>"
 
 Pure JS changes do not require a prebuild.
 
+Avoiding prebuild is a preference for convenience (it's friction, and it can't be verified from a sandbox without an Android build), not a hard constraint — it does not outrank the actual functionality being built. If a feature genuinely needs a native module or native code, do the prebuild; don't contort the implementation (e.g. hand-rolling something a native module would do better) just to dodge it. When a prebuild does happen, get it verified via a real build (e.g. dispatching `build-apk-debug.yml`) before relying on it, since it can't be compile-checked here.
+
 ## Development workflow
 - **Local testing:** `npx expo start --lan` — connects a physical phone on the same network via Expo Go.
 - **Claude's working branch:** `claude/main` — all Claude Code changes go here. Never commit directly to `dev` or `main`.

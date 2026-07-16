@@ -74,25 +74,26 @@ export async function clearCookies() {
 // AppCookie on its own and keeps the week filled without the user ever
 // opening the app, for as long as the ~monthly login survives. That hinges
 // on refreshAppCookie() below being able to mint a fresh AppCookie headlessly
-// — confirmed working on-device (see its doc block): the portal's
-// silent-refresh mechanism, identified via the "Instrumented login trace" in
-// TestConnectionScreen, is a plain MSAL refresh-token exchange.
+// — CONFIRMED WORKING on-device, both its fast path (direct MSAL refresh
+// token redemption) and its fallback (silent SSO via Azure's own session
+// cookie, for when the refresh token itself has gone stale) — see
+// refreshAppCookie's own doc block for the full flow and how each was
+// verified.
 //
 // Supporting pieces already in place:
 // - refreshAppCookie() (below) is the seam the background worker calls before
-//   every submit. It's implemented as Path A: redeem the MSAL refresh token
-//   at Azure, then GET /api/account/login with the id_token to mint a fresh
-//   AppCookie — see its own doc block for the full flow.
+//   every submit — see its own doc block for the full flow.
 // - On launch with a dead session, RootNavigator mounts the hidden
 //   SessionRefreshWebView (components/SessionRefreshWebView.js) behind the
 //   splash — a real WebView login, minus the screen. This is a SECONDARY
-//   safety net (and the credential-capture point for Path A), not the
-//   feature itself. The visible LoginScreen is the last-resort fallback for a
-//   genuinely-expired (~monthly) login.
-// - Until the headless refresh lands, background fires still fail whenever
-//   they land on a dead AppCookie; the worker only notifies "re-login" when
-//   the filled window is actually about to run out (see tasks/runAutoSubmit.js
-//   and tasks/autoSubmitTask.js).
+//   safety net (and the credential-capture point for the refresh/username
+//   tokens), not the feature itself. The visible LoginScreen is the
+//   last-resort fallback for a genuinely-expired (~monthly) login.
+// - A background AuthError can still happen (transient network issues,
+//   Azure hiccups); the worker only notifies "re-login" when a real refresh
+//   attempt genuinely failed, or (before any refresh has ever been attempted)
+//   when the filled window is actually about to run out (see
+//   tasks/runAutoSubmit.js and tasks/autoSubmitTask.js).
 let reauthInFlight = null;
 let reauthCooldownUntil = 0;
 let lastReauthAttempt = null;

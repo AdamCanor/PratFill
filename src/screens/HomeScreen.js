@@ -594,9 +594,18 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.iconBtn}
-            onPress={async () => {
-              await clearCookies();
-              navigation.replace('Login');
+            onPress={() => {
+              Alert.alert('התנתקות', 'האם אתה בטוח שברצונך להתנתק?', [
+                { text: 'ביטול', style: 'cancel' },
+                {
+                  text: 'התנתק',
+                  style: 'destructive',
+                  onPress: async () => {
+                    await clearCookies();
+                    navigation.replace('Login');
+                  },
+                },
+              ]);
             }}
           >
             <MaterialCommunityIcons name="logout" size={22} color={colors.text} />

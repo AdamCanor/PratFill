@@ -30,6 +30,7 @@ export default function SettingsScreen({ navigation }) {
     quickBtn2: '',
     autoSubmitEnabled: false,
     commanderMode: false,
+    devSettingsEnabled: false,
   });
 
   const loadSummary = useCallback(async () => {
@@ -45,6 +46,7 @@ export default function SettingsScreen({ navigation }) {
       quickBtn2: qb[1]?.label || '',
       autoSubmitEnabled: s.autoSubmit?.enabled || false,
       commanderMode: s.commanderMode || false,
+      devSettingsEnabled: s.devSettingsEnabled || false,
     });
   }, []);
 
@@ -94,12 +96,14 @@ export default function SettingsScreen({ navigation }) {
           meta={summary.commanderMode ? 'מצב מפקד פעיל' : null}
           onPress={() => navigation.navigate('SettingsGeneral')}
         />
-        <NavRow
-          icon="wrench-outline"
-          label="כלי פיתוח"
-          meta="בדיקת חיבור, הרצה ידנית"
-          onPress={() => navigation.navigate('SettingsDev')}
-        />
+        {summary.devSettingsEnabled && (
+          <NavRow
+            icon="wrench-outline"
+            label="כלי פיתוח"
+            meta="בדיקת חיבור, הרצה ידנית"
+            onPress={() => navigation.navigate('SettingsDev')}
+          />
+        )}
       </ScrollView>
     </View>
   );

@@ -5,6 +5,8 @@ import {
   markAuthFailureNotified,
   hasNotifiedAuthFailure,
   isAutoSubmitEnabled,
+  canSendNotificationToday,
+  markNotificationSent,
 } from './runAutoSubmit';
 
 export const TASK_NAME = 'auto-submit-reports';
@@ -49,10 +51,12 @@ try {
       if (session.attempted) {
         // A real headless refresh was tried and failed — the long-lived
         // login is genuinely dead and only a manual re-login can recover it.
-        // Always surface this, but once per death (cleared on next success).
-        if (!(await hasNotifiedAuthFailure())) {
+        // Always surface this, but once per death (cleared on next success)
+        // and never more than one notification a day overall.
+        if (!(await hasNotifiedAuthFailure()) && (await canSendNotificationToday())) {
           await notifyReloginNeeded();
           await markAuthFailureNotified();
+          await markNotificationSent();
         }
       } else {
         // No headless refresh wired up yet (the portal's silent-refresh
@@ -60,9 +64,10 @@ try {
         // doch1.js). We can't tell a recoverable short-cookie death from a
         // real one here, so fall back to the conservative coverage-based
         // throttle instead of nagging every fire.
-        if (await shouldNotifyAuthFailure()) {
+        if ((await shouldNotifyAuthFailure()) && (await canSendNotificationToday())) {
           await notifyReloginNeeded();
           await markAuthFailureNotified();
+          await markNotificationSent();
         }
       }
       return BackgroundTask.BackgroundTaskResult.Failed;
@@ -70,9 +75,10 @@ try {
       // AuthError thrown mid-submit despite a fresh session — treat like a
       // death, throttled the same conservative way.
       if (e instanceof AuthError) {
-        if (await shouldNotifyAuthFailure()) {
+        if ((await shouldNotifyAuthFailure()) && (await canSendNotificationToday())) {
           await notifyReloginNeeded();
           await markAuthFailureNotified();
+          await markNotificationSent();
         }
         return BackgroundTask.BackgroundTaskResult.Failed;
       }

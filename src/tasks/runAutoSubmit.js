@@ -7,6 +7,7 @@ export const LAST_RUN_KEY = 'doch1_auto_submit_last_run';
 const COVERAGE_KEY = 'doch1_auto_submit_coverage';
 const AUTH_NOTIFIED_KEY = 'doch1_auto_submit_auth_notified';
 const SUCCESS_NOTIFIED_KEY = 'doch1_auto_submit_success_notified';
+const LAST_NOTIFICATION_KEY = 'doch1_auto_submit_last_notification_at';
 
 export async function getLastAutoSubmitRun() {
   const raw = await AsyncStorage.getItem(LAST_RUN_KEY);
@@ -81,6 +82,28 @@ async function markSuccessNotified() {
   await AsyncStorage.setItem(SUCCESS_NOTIFIED_KEY, new Date().toISOString());
 }
 
+// Hard cap shared across BOTH notification types (success and re-login):
+// at most one notification, of either kind, per rolling 24h — regardless of
+// how many times the worker fires in that window (currently ~every 6h) or
+// how many separate things happened. This is a backstop, not the primary
+// throttle — success already limits itself via successNotify, and re-login
+// via the once-per-death dedup above — but neither of those alone rules out
+// e.g. a partial-fill retry or a session dying later the same day as an
+// earlier success, each independently deciding to notify. Every notification
+// site must check this immediately before sending and call
+// markNotificationSent() immediately after.
+const NOTIFICATION_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+export async function canSendNotificationToday() {
+  const raw = await AsyncStorage.getItem(LAST_NOTIFICATION_KEY);
+  if (!raw) return true;
+  return Date.now() - Date.parse(raw) >= NOTIFICATION_COOLDOWN_MS;
+}
+
+export async function markNotificationSent() {
+  await AsyncStorage.setItem(LAST_NOTIFICATION_KEY, new Date().toISOString());
+}
+
 export async function runAutoSubmit() {
   const raw = await AsyncStorage.getItem('doch1_settings');
   const settings = raw ? JSON.parse(raw) : null;
@@ -118,9 +141,14 @@ export async function runAutoSubmit() {
       count++;
     }
 
-    // Only notify when we actually filled something (quiet-by-default), and
-    // only as often as the user's chosen cadence allows.
-    if (count > 0 && (await shouldNotifySuccess(settings.autoSubmit?.successNotify))) {
+    // Only notify when we actually filled something (quiet-by-default), only
+    // as often as the user's chosen cadence allows, and never more than once
+    // a day overall (shared cap with the re-login notification).
+    if (
+      count > 0 &&
+      (await shouldNotifySuccess(settings.autoSubmit?.successNotify)) &&
+      (await canSendNotificationToday())
+    ) {
       await Notifications.scheduleNotificationAsync({
         content: {
           title: 'PratFill',
@@ -129,6 +157,7 @@ export async function runAutoSubmit() {
         trigger: null,
       });
       await markSuccessNotified();
+      await markNotificationSent();
     }
 
     // Reaching here means every upcoming day with preset defaults is now

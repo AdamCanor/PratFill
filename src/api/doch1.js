@@ -229,13 +229,18 @@ async function request(path, { method = 'GET', headers = {}, body } = {}) {
 
 // --- Endpoints ----------------------------------------------------------
 
-// month: 1-12, year: e.g. 2026
+// month: 1-12, year: e.g. 2026. Normalized to always return a plain array —
+// the API wraps the actual list under one of a few keys depending on
+// endpoint version (.days / .futureReports / .data), and every caller needs
+// the flat list, not the wrapper.
 export async function getFutureReports(month, year) {
-  return request('/api/Attendance/getFutureReport', {
+  const data = await request('/api/Attendance/getFutureReport', {
     method: 'POST',
     headers: { 'content-type': 'application/json;charset=UTF-8' },
     body: JSON.stringify({ month, year }),
   });
+  if (Array.isArray(data)) return data;
+  return data?.days || data?.futureReports || data?.data || [];
 }
 
 // date format: DD.MM.YYYY

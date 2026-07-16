@@ -233,7 +233,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
 
       const upcomingApiDates = new Set(upcoming.map((d) => d.apiDate));
       const flat = results
-        .flatMap((r) => (Array.isArray(r) ? r : r?.days || r?.futureReports || r?.data || []))
+        .flat()
         .filter((r) => r && upcomingApiDates.has(normalizeDate(r)));
 
       setReports(flat);

@@ -21,6 +21,23 @@ export const LOGGED_IN_PATH_HINTS = ['/hp', '/secondaries', '/calendar', '/prima
 // proved this exact localStorage key/shape in the first place).
 export const MSAL_RT_CAPTURE_JS = `
 (function () {
+  function findUsername() {
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        // The MSAL AccountEntity key looks like <homeAccountId>-login.microsoftonline.com-<realm>
+        // — distinguish it from the credential keys (refreshtoken/accesstoken/idtoken).
+        if (k.indexOf('-login.microsoftonline.com-') >= 0 &&
+            k.indexOf('-refreshtoken-') < 0 && k.indexOf('-accesstoken-') < 0 && k.indexOf('-idtoken-') < 0) {
+          try {
+            var acc = JSON.parse(localStorage.getItem(k) || '{}');
+            if (acc && acc.username) return acc.username;
+          } catch (e) {}
+        }
+      }
+    } catch (e) {}
+    return '';
+  }
   function grab() {
     try {
       for (var i = 0; i < localStorage.length; i++) {
@@ -30,7 +47,7 @@ export const MSAL_RT_CAPTURE_JS = `
           if (v && v.secret) {
             var tid = '';
             if (v.homeAccountId && v.homeAccountId.indexOf('.') >= 0) tid = v.homeAccountId.split('.')[1];
-            window.ReactNativeWebView.postMessage(JSON.stringify({ __msalRt: true, secret: v.secret, clientId: v.clientId || '', tenantId: tid }));
+            window.ReactNativeWebView.postMessage(JSON.stringify({ __msalRt: true, secret: v.secret, clientId: v.clientId || '', tenantId: tid, username: findUsername() }));
             return true;
           }
         }
@@ -49,7 +66,7 @@ export async function handleLoginWebViewMessage(event) {
   try {
     const msg = JSON.parse(event?.nativeEvent?.data);
     if (msg?.__msalRt && msg.secret && msg.tenantId && msg.clientId) {
-      await saveMsalRefreshToken({ secret: msg.secret, clientId: msg.clientId, tenantId: msg.tenantId });
+      await saveMsalRefreshToken({ secret: msg.secret, clientId: msg.clientId, tenantId: msg.tenantId, username: msg.username || '' });
     }
   } catch (_) {
     // Non-RT message or parse error — ignore.

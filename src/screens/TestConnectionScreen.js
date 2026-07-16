@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { WebView } from 'react-native-webview';
 import CookieManager from '@preeternal/react-native-cookie-manager';
-import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, getLastReauthAttempt, refreshAppCookie, getMsalRefreshToken, saveMsalRefreshToken, COOKIE_DOMAIN, LOGIN_URL } from '../api/doch1';
+import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, getLastReauthAttempt, refreshAppCookie, testSsoFallback, getMsalRefreshToken, saveMsalRefreshToken, COOKIE_DOMAIN, LOGIN_URL } from '../api/doch1';
 import { getLastAutoSubmitRun } from '../tasks/runAutoSubmit';
 import { colors, spacing, radius } from '../theme';
 
@@ -73,6 +73,23 @@ const TRACE_INSTRUMENTATION_JS = `
   // built from this message must only ever show length, never the secret
   // itself.
   var rtReported = false;
+  function findAccountUsername() {
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        // AccountEntity key looks like <homeAccountId>-login.microsoftonline.com-<realm>
+        // — distinguish from the credential keys (refreshtoken/accesstoken/idtoken).
+        if (k.indexOf('-login.microsoftonline.com-') >= 0 &&
+            k.indexOf('-refreshtoken-') < 0 && k.indexOf('-accesstoken-') < 0 && k.indexOf('-idtoken-') < 0) {
+          try {
+            var acc = JSON.parse(localStorage.getItem(k) || '{}');
+            if (acc && acc.username) return acc.username;
+          } catch (e) {}
+        }
+      }
+    } catch (e) {}
+    return '';
+  }
   function grabRt() {
     if (rtReported) return true;
     try {
@@ -85,11 +102,12 @@ const TRACE_INSTRUMENTATION_JS = `
           if (v && v.secret) {
             var tid = '';
             if (v.homeAccountId && v.homeAccountId.indexOf('.') >= 0) tid = v.homeAccountId.split('.')[1];
+            var username = findAccountUsername();
             rtReported = true;
             send('rtcapture', {
               found: true, key: k, keyLen: raw ? raw.length : 0,
               parsedKeys: Object.keys(v).join(','),
-              clientId: v.clientId || '', tenantId: tid, homeAccountId: v.homeAccountId || '',
+              clientId: v.clientId || '', tenantId: tid, homeAccountId: v.homeAccountId || '', username: username,
               secretLen: v.secret.length, secret: v.secret,
             });
             return true;
@@ -489,10 +507,10 @@ export default function TestConnectionScreen({ navigation }) {
       // independent of LoginScreen's WebView lifecycle.
       if (msg.found) {
         append(`[rt capture] FOUND key=${msg.key} (${msg.keyLen} chars) fields=[${msg.parsedKeys}]`);
-        append(`[rt capture] clientId=${msg.clientId} tenantId=${msg.tenantId} secretLen=${msg.secretLen}`);
+        append(`[rt capture] clientId=${msg.clientId} tenantId=${msg.tenantId} secretLen=${msg.secretLen} username=${msg.username || '(not found)'}`);
         if (msg.secret && msg.clientId && msg.tenantId) {
           try {
-            await saveMsalRefreshToken({ secret: msg.secret, clientId: msg.clientId, tenantId: msg.tenantId });
+            await saveMsalRefreshToken({ secret: msg.secret, clientId: msg.clientId, tenantId: msg.tenantId, username: msg.username || '' });
             append('✅ Saved to AsyncStorage — "Test headless refresh" should now find it.');
           } catch (err) {
             append(`❌ Failed to save: ${err.message}`);
@@ -554,6 +572,41 @@ export default function TestConnectionScreen({ navigation }) {
       append(`AppCookie changed: ${before !== after}`);
       if (res.ok && after && after.length > 100) append('✅ Headless refresh works — a fresh AppCookie was minted with no WebView.');
       else if (!res.ok) append(`❌ Refresh failed: ${res.reason || 'unknown'}`);
+    } catch (err) {
+      append(`❌ Error: ${err.message}`);
+      append(`Error name: ${err.name}, stack: ${err.stack}`);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  // Forces the SILENT SSO fallback path specifically (Azure session cookie,
+  // not the cached MSAL refresh token) — the mechanism that's supposed to
+  // let the worker recover even after the refresh token itself has gone
+  // stale (>24h with no successful refresh). Bypasses the normal
+  // "try refresh token first" order so this can be validated on-device
+  // immediately, without waiting a day for the refresh token to actually
+  // expire. NOT yet confirmed working — this is the untested half of the
+  // headless refresh; expect to iterate on whatever this returns.
+  const testSsoFallbackButton = async () => {
+    setLog([]);
+    setRunning(true);
+    try {
+      const rt = await getMsalRefreshToken();
+      append(`Stored token metadata: ${rt ? `tenant=${rt.tenantId}, client=${rt.clientId}, username=${rt.username || '(none captured)'}` : 'NONE — run a login/trace first'}`);
+      const before = (await CookieManager.get(COOKIE_DOMAIN))?.AppCookie?.value;
+      append(`AppCookie before: ${before ? `${before.slice(0, 16)}… (${before.length} chars)` : '(none)'}`);
+
+      append('Calling testSsoFallback() — forces the /authorize?prompt=none path...');
+      const res = await testSsoFallback();
+      append(`Result: ${JSON.stringify(res)}`);
+
+      await CookieManager.flush?.();
+      const after = (await CookieManager.get(COOKIE_DOMAIN))?.AppCookie?.value;
+      append(`AppCookie after: ${after ? `${after.slice(0, 16)}… (${after.length} chars)` : '(none)'}`);
+      append(`AppCookie changed: ${before !== after}`);
+      if (res.ok && after && after.length > 100) append('✅ SSO-cookie fallback works — recovered via Azure session cookie alone.');
+      else if (!res.ok) append(`❌ SSO fallback failed: ${res.reason || 'unknown'}`);
     } catch (err) {
       append(`❌ Error: ${err.message}`);
       append(`Error name: ${err.name}, stack: ${err.stack}`);
@@ -651,6 +704,10 @@ export default function TestConnectionScreen({ navigation }) {
 
         <TouchableOpacity style={styles.secondaryButton} onPress={testHeadlessRefresh} disabled={running}>
           <Text style={styles.secondaryButtonText}>Test headless refresh (refreshAppCookie)</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.secondaryButton} onPress={testSsoFallbackButton} disabled={running}>
+          <Text style={styles.secondaryButtonText}>Test SSO fallback (force)</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.secondaryButton} onPress={startTrace} disabled={running}>

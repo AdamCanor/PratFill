@@ -66,8 +66,9 @@ export async function clearCookies() {
 // AppCookie on its own and keeps the week filled without the user ever
 // opening the app, for as long as the ~monthly login survives. That hinges
 // on refreshAppCookie() below being able to mint a fresh AppCookie headlessly
-// — which needs the portal's real silent-refresh mechanism, still to be
-// identified via the "Instrumented login trace" in TestConnectionScreen.
+// — confirmed working on-device (see its doc block): the portal's
+// silent-refresh mechanism, identified via the "Instrumented login trace" in
+// TestConnectionScreen, is a plain MSAL refresh-token exchange.
 //
 // Supporting pieces already in place:
 // - refreshAppCookie() (below) is the seam the background worker calls before

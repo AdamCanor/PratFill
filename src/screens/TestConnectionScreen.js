@@ -597,6 +597,14 @@ export default function TestConnectionScreen({ navigation }) {
       const before = (await CookieManager.get(COOKIE_DOMAIN))?.AppCookie?.value;
       append(`AppCookie before: ${before ? `${before.slice(0, 16)}… (${before.length} chars)` : '(none)'}`);
 
+      // The Azure session cookies are what the silent SSO path actually rides
+      // on — dump them so a login_required failure is diagnosable (was an
+      // ESTSAUTH cookie even present, and if so is it persistent or expired?).
+      const aadCookies = (await CookieManager.get('https://login.microsoftonline.com')) || {};
+      const aadNames = Object.keys(aadCookies);
+      append(`Azure SSO cookies (login.microsoftonline.com) — ${aadNames.length}: ${aadNames.join(', ') || '(none)'}`);
+      aadNames.forEach((name) => append(describeCookie(name, aadCookies[name])));
+
       append('Calling testSsoFallback() — forces the /authorize?prompt=none path...');
       const res = await testSsoFallback();
       append(`Result: ${JSON.stringify(res)}`);

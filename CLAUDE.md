@@ -95,6 +95,7 @@ Avoiding prebuild is a preference for convenience (it's friction, and it can't b
 ## Development workflow
 - **Local testing:** `npx expo start --lan` — connects a physical phone on the same network via Expo Go.
 - **Claude's working branch:** `claude/main` — all Claude Code changes go here. Never commit directly to `dev` or `main`.
+- **Branch creation:** always create new Claude branches from `dev`, not `main`, unless explicitly told otherwise — `dev` has the latest merged work and branching from `main` risks stale-base merge conflicts.
 - **Merging:** when work is ready, merge `claude/main` → `dev` via PR, then `dev` → `main` for a release.
 - **No CI on `dev`** — `dev` pushes trigger nothing.
 - **Release:** merge `dev` → `main` via PR. On `main` push, `release.yml` builds a production APK and publishes a GitHub Release tagged `v{version}-{sha}`.

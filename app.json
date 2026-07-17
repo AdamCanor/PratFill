@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "דוח 10",
+    "name": "דו\"ח 10",
     "slug": "pratfill",
-    "version": "1.0.0",
-    "runtimeVersion": "1.0.0",
+    "version": "1.1.0",
+    "runtimeVersion": "1.1.0",
     "updates": {
       "url": "https://u.expo.dev/90d63a31-d3d8-4a51-818a-10ad3e62b272",
       "requestHeaders": {
@@ -13,11 +13,17 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#121212"
-    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 100,
+          "resizeMode": "contain",
+          "backgroundColor": "#121212"
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.pratfill.app"

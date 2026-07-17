@@ -126,7 +126,10 @@ export default function SettingsPresetsScreen({ navigation }) {
     setModalVisible(true);
   };
 
-  const handleSelectMain = (code) => setModalMain(code);
+  const handleSelectMain = (status) => {
+    setModalMain(status.statusCode);
+    setModalSelectedSecondary(status.secondaries?.length === 1 ? status.secondaries[0].statusCode : null);
+  };
 
   const handleSelectSecondary = (secondaryCode) => {
     const note = modalNote.trim();
@@ -240,7 +243,7 @@ export default function SettingsPresetsScreen({ navigation }) {
                   <TouchableOpacity
                     key={s.statusCode}
                     style={styles.modalOption}
-                    onPress={() => handleSelectMain(s.statusCode)}
+                    onPress={() => handleSelectMain(s)}
                   >
                     <Text style={styles.modalOptionText}>{s.statusDescription}</Text>
                   </TouchableOpacity>
@@ -428,7 +431,7 @@ const makeStyles = (accent, accentText) => StyleSheet.create({
     justifyContent: 'flex-end',
   },
   editorPresetName: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  renameRow: { flex: 1 },
+  renameRow: { flex: 1, flexDirection: 'row' },
   renameInput: {
     flex: 1,
     color: colors.text,

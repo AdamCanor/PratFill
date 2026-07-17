@@ -233,7 +233,7 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
 
       const upcomingApiDates = new Set(upcoming.map((d) => d.apiDate));
       const flat = results
-        .flatMap((r) => (Array.isArray(r) ? r : r?.days || r?.futureReports || r?.data || []))
+        .flat()
         .filter((r) => r && upcomingApiDates.has(normalizeDate(r)));
 
       setReports(flat);
@@ -594,9 +594,18 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.iconBtn}
-            onPress={async () => {
-              await clearCookies();
-              navigation.replace('Login');
+            onPress={() => {
+              Alert.alert('התנתקות', 'האם אתה בטוח שברצונך להתנתק?', [
+                { text: 'ביטול', style: 'cancel' },
+                {
+                  text: 'התנתק',
+                  style: 'destructive',
+                  onPress: async () => {
+                    await clearCookies();
+                    navigation.replace('Login');
+                  },
+                },
+              ]);
             }}
           >
             <MaterialCommunityIcons name="logout" size={22} color={colors.text} />
@@ -726,7 +735,10 @@ export default function HomeScreen({ navigation, isCommanderProp = false }) {
                 <TouchableOpacity
                   key={s.statusCode}
                   style={styles.modalOption}
-                  onPress={() => setModalMain(s.statusCode)}
+                  onPress={() => {
+                    setModalMain(s.statusCode);
+                    setModalSelectedSecondary(s.secondaries?.length === 1 ? s.secondaries[0].statusCode : null);
+                  }}
                 >
                   <Text style={styles.modalOptionText}>{s.statusDescription}</Text>
                 </TouchableOpacity>

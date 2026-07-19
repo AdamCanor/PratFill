@@ -4,6 +4,7 @@ import { WebView } from 'react-native-webview';
 import CookieManager from '@preeternal/react-native-cookie-manager';
 import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, getLastReauthAttempt, refreshAppCookie, testSsoFallback, getMsalRefreshToken, saveMsalRefreshToken, COOKIE_DOMAIN, LOGIN_URL } from '../api/doch1';
 import { getLastAutoSubmitRun } from '../tasks/runAutoSubmit';
+import { getLastLaunchRefresh } from '../utils/launchRefreshLog';
 import { colors, spacing, radius } from '../theme';
 
 // Injected into every top-level document the trace WebView loads (including
@@ -323,6 +324,16 @@ export default function TestConnectionScreen({ navigation }) {
       return;
     }
     append(JSON.stringify(lastRun, null, 2));
+  };
+
+  const showLastLaunchRefresh = async () => {
+    setLog([]);
+    const last = await getLastLaunchRefresh();
+    if (!last) {
+      append('No launch refresh attempt recorded yet.');
+      return;
+    }
+    append(JSON.stringify(last, null, 2));
   };
 
   const inspectUrl = async (url, label) => {
@@ -708,6 +719,10 @@ export default function TestConnectionScreen({ navigation }) {
 
         <TouchableOpacity style={styles.secondaryButton} onPress={showLastAutoSubmitRun} disabled={running}>
           <Text style={styles.secondaryButtonText}>Show last auto-submit run</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.secondaryButton} onPress={showLastLaunchRefresh} disabled={running}>
+          <Text style={styles.secondaryButtonText}>Show last launch refresh attempt</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.secondaryButton} onPress={testHeadlessRefresh} disabled={running}>

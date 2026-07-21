@@ -23,14 +23,7 @@
           "backgroundColor": "#121212"
         }
       ],
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "allowBackup": false
-          }
-        }
-      ]
+      "./plugins/withDisableAllowBackup"
     ],
     "ios": {
       "supportsTablet": true,

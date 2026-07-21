@@ -12,11 +12,14 @@
 // SHA-256 block boundary, a 1000-char string, and 1/2/3/32-byte base64 edge
 // cases — all matched exactly). If you touch this file, re-run that check.
 //
-// The only non-textbook shortcut: randomBytes uses Math.random(), not a
-// CSPRNG (Hermes has none without a native module). For this app's on-device,
-// single-use, never-transmitted PKCE verifier that's an acceptable trade to
-// stay prebuild-free; upgrading it would require the native dependency this
-// module exists to avoid.
+// randomBytes draws from a CSPRNG (expo-crypto's native secure RNG) — RFC 7636
+// requires the PKCE code_verifier to come from a cryptographically secure
+// source, and the same helper also feeds the OAuth `state` and `nonce`. It
+// previously used Math.random() (a non-cryptographic Hermes PRNG) to stay
+// prebuild-free; that trade-off was dropped in favor of correctness once the
+// project took a native module for SecureStore anyway.
+
+import * as Crypto from 'expo-crypto';
 
 function rotr(x, n) {
   return (x >>> n) | (x << (32 - n));
@@ -89,9 +92,9 @@ export function base64UrlEncode(bytes) {
 }
 
 export function randomBytes(n) {
-  const b = new Uint8Array(n);
-  for (let i = 0; i < n; i++) b[i] = Math.floor(Math.random() * 256);
-  return b;
+  // expo-crypto's getRandomValues fills the array in place from the platform
+  // CSPRNG and returns it — synchronous, so callers (trySsoSilent) stay sync.
+  return Crypto.getRandomValues(new Uint8Array(n));
 }
 
 export function asciiBytes(str) {

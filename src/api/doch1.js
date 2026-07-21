@@ -547,6 +547,11 @@ async function trySsoSilent(rt) {
       reason: `authorize-no-code: error=${query.error || 'unknown'} desc=${(query.error_description || '').slice(0, 160)} finalUrl=${finalUrl.slice(0, 200)} | ${cookieSummary}`,
     };
   }
+  // Bind the redirect to our request: reject a code that came back with a
+  // state we didn't send (auth-code / response injection defense-in-depth).
+  if (query.state !== state) {
+    return { ok: false, reason: 'authorize-state-mismatch' };
+  }
 
   try {
     const tokenRes = await fetch(`${aadAuthority(rt.tenantId)}/oauth2/v2.0/token`, {

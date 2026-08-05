@@ -37,6 +37,25 @@ async function getCookieHeaderForDomain(domain) {
   return buildCookieHeader(cookies);
 }
 
+// Diagnostic-only summary of the Azure SSO cookie jar (login.microsoftonline.com),
+// for folding into a failure reason. Reports cookie NAMES only — never their
+// values, since a cookie value here IS the session secret — plus the count, the
+// built Cookie-header length, and the presence/expiry of the two Azure session
+// cookies. This is what lets a silent-SSO login_required failure (AADSTS50058)
+// say whether we even had an ESTSAUTH cookie to send (never captured → Case A)
+// versus sent one Azure rejected (expired/session-only → Case B); the raw
+// AADSTS50058 text is identical either way.
+async function summarizeAadCookies() {
+  try {
+    const jar = (await CookieManager.get(AAD_LOGIN_ORIGIN)) || {};
+    const names = Object.keys(jar);
+    const note = (n) => (jar[n] ? `${n}(exp=${jar[n].expires || 'session'})` : `${n}=absent`);
+    return `aadCookies=[${names.join(',') || 'none'}] count=${names.length} headerLen=${buildCookieHeader(jar).length} ${note('ESTSAUTHPERSISTENT')} ${note('ESTSAUTH')}`;
+  } catch (e) {
+    return `aadCookies=error:${String(e?.message || e).slice(0, 80)}`;
+  }
+}
+
 export async function hasAppCookie() {
   const cookies = await CookieManager.get(COOKIE_DOMAIN);
   return Boolean(cookies && cookies.AppCookie && cookies.AppCookie.value);
@@ -478,6 +497,10 @@ async function trySsoSilent(rt) {
   })}`;
 
   let authRes;
+  // Captured before the request so it's available in every failure branch —
+  // tells us which Azure session cookies we actually had to send (see
+  // summarizeAadCookies).
+  const cookieSummary = await summarizeAadCookies();
   try {
     const cookieHeader = await getCookieHeaderForDomain(AAD_LOGIN_ORIGIN);
     authRes = await fetch(authorizeUrl, {
@@ -485,7 +508,7 @@ async function trySsoSilent(rt) {
       headers: cookieHeader ? { cookie: cookieHeader } : undefined,
     });
   } catch (e) {
-    return { ok: false, reason: `authorize-network-error: ${String(e?.message || e).slice(0, 160)}` };
+    return { ok: false, reason: `authorize-network-error: ${String(e?.message || e).slice(0, 160)} | ${cookieSummary}` };
   }
 
   const finalUrl = authRes?.url || '';
@@ -493,7 +516,7 @@ async function trySsoSilent(rt) {
   if (!query.code) {
     return {
       ok: false,
-      reason: `authorize-no-code: error=${query.error || 'unknown'} desc=${(query.error_description || '').slice(0, 160)} finalUrl=${finalUrl.slice(0, 200)}`,
+      reason: `authorize-no-code: error=${query.error || 'unknown'} desc=${(query.error_description || '').slice(0, 160)} finalUrl=${finalUrl.slice(0, 200)} | ${cookieSummary}`,
     };
   }
 

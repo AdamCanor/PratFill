@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -12,18 +12,29 @@ import SettingsAutoSubmitScreen from '../screens/SettingsAutoSubmitScreen';
 import SettingsGeneralScreen from '../screens/SettingsGeneralScreen';
 import SettingsDevScreen from '../screens/SettingsDevScreen';
 import TestConnectionScreen from '../screens/TestConnectionScreen';
-import { getUser, refreshStatuses } from '../api/doch1';
+import { getUser, refreshAppCookie, refreshStatuses } from '../api/doch1';
 import SessionRefreshWebView from '../components/SessionRefreshWebView';
+import { recordLaunchRefresh } from '../utils/launchRefreshLog';
 import { colors } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator();
+
+// refreshAppCookie()'s own fetch chain carries no timeout (only the dead
+// attemptSilentReauth() in doch1.js has one) — without this, a hung request
+// here would strand the launch spinner forever, upstream of the WebView
+// fallback that would otherwise time out on its own in 30s.
+const HEADLESS_REFRESH_TIMEOUT_MS = 8000;
+function withTimeout(promise, ms, fallback) {
+  return Promise.race([promise, new Promise((resolve) => setTimeout(() => resolve(fallback), ms))]);
+}
 
 export default function RootNavigator() {
   const { accentColor } = useTheme();
   const [initialRoute, setInitialRoute] = useState(null);
   const [isCommander, setIsCommander] = useState(false);
   const [silentRefreshing, setSilentRefreshing] = useState(false);
+  const headlessResultRef = useRef(null);
 
   const onAuthenticated = useCallback((user) => {
     setIsCommander(!!user?.isCommanderAuth);
@@ -40,13 +51,35 @@ export default function RootNavigator() {
       const user = await getUser();
       if (user?.isUserAuth) {
         onAuthenticated(user);
-      } else {
-        // Not authenticated — but per the session model in doch1.js the
-        // underlying login usually still lives (~2 weeks); only AppCookie
-        // (~5h) has died. Try the hidden-WebView refresh behind the splash
-        // before falling back to the visible Login screen.
-        setSilentRefreshing(true);
+        return;
       }
+
+      // Not authenticated — but per the session model in doch1.js the
+      // underlying login usually still lives (~1 month); only AppCookie
+      // (~5h) has died. Try the SAME headless refresh the background task
+      // already uses before falling back to the hidden-WebView replay: the
+      // background task rotates the cached Azure refresh token on every run,
+      // which can leave the WebView's own separately-cached copy stale and
+      // force it onto a slower path that can miss its 30s timeout — even
+      // though the headless path succeeds instantly with the same Azure
+      // session.
+      const headless = await withTimeout(refreshAppCookie(), HEADLESS_REFRESH_TIMEOUT_MS, {
+        ok: false,
+        attempted: true,
+        reason: 'client-timeout',
+      });
+
+      if (headless.ok) {
+        const refreshed = await getUser();
+        if (refreshed?.isUserAuth) {
+          recordLaunchRefresh({ resolvedVia: 'headless', headless: { ok: true }, webview: null }).catch(() => {});
+          onAuthenticated(refreshed);
+          return;
+        }
+      }
+
+      headlessResultRef.current = { ok: false, reason: headless.ok ? 're-check-failed' : headless.reason };
+      setSilentRefreshing(true);
     })();
   }, [onAuthenticated]);
 
@@ -75,8 +108,20 @@ export default function RootNavigator() {
         <ActivityIndicator color={accentColor} size="large" />
         {silentRefreshing && (
           <SessionRefreshWebView
-            onSuccess={onAuthenticated}
-            onFailure={() => {
+            onSuccess={(user) => {
+              recordLaunchRefresh({
+                resolvedVia: 'webview',
+                headless: headlessResultRef.current,
+                webview: { ok: true },
+              }).catch(() => {});
+              onAuthenticated(user);
+            }}
+            onFailure={(reason) => {
+              recordLaunchRefresh({
+                resolvedVia: 'login-required',
+                headless: headlessResultRef.current,
+                webview: { ok: false, reason },
+              }).catch(() => {});
               setSilentRefreshing(false);
               setInitialRoute('Login');
             }}

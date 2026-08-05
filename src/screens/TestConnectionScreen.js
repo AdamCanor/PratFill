@@ -4,6 +4,7 @@ import { WebView } from 'react-native-webview';
 import CookieManager from '@preeternal/react-native-cookie-manager';
 import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, getLastReauthAttempt, refreshAppCookie, testSsoFallback, getMsalRefreshToken, saveMsalRefreshToken, COOKIE_DOMAIN, LOGIN_URL } from '../api/doch1';
 import { getLastAutoSubmitRun } from '../tasks/runAutoSubmit';
+import { getLastLaunchRefresh } from '../utils/launchRefreshLog';
 import { colors, spacing, radius } from '../theme';
 
 // Injected into every top-level document the trace WebView loads (including
@@ -325,6 +326,16 @@ export default function TestConnectionScreen({ navigation }) {
     append(JSON.stringify(lastRun, null, 2));
   };
 
+  const showLastLaunchRefresh = async () => {
+    setLog([]);
+    const last = await getLastLaunchRefresh();
+    if (!last) {
+      append('No launch refresh attempt recorded yet.');
+      return;
+    }
+    append(JSON.stringify(last, null, 2));
+  };
+
   const inspectUrl = async (url, label) => {
     setLog([]);
     setRunning(true);
@@ -597,6 +608,14 @@ export default function TestConnectionScreen({ navigation }) {
       const before = (await CookieManager.get(COOKIE_DOMAIN))?.AppCookie?.value;
       append(`AppCookie before: ${before ? `${before.slice(0, 16)}… (${before.length} chars)` : '(none)'}`);
 
+      // The Azure session cookies are what the silent SSO path actually rides
+      // on — dump them so a login_required failure is diagnosable (was an
+      // ESTSAUTH cookie even present, and if so is it persistent or expired?).
+      const aadCookies = (await CookieManager.get('https://login.microsoftonline.com')) || {};
+      const aadNames = Object.keys(aadCookies);
+      append(`Azure SSO cookies (login.microsoftonline.com) — ${aadNames.length}: ${aadNames.join(', ') || '(none)'}`);
+      aadNames.forEach((name) => append(describeCookie(name, aadCookies[name])));
+
       append('Calling testSsoFallback() — forces the /authorize?prompt=none path...');
       const res = await testSsoFallback();
       append(`Result: ${JSON.stringify(res)}`);
@@ -700,6 +719,10 @@ export default function TestConnectionScreen({ navigation }) {
 
         <TouchableOpacity style={styles.secondaryButton} onPress={showLastAutoSubmitRun} disabled={running}>
           <Text style={styles.secondaryButtonText}>Show last auto-submit run</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.secondaryButton} onPress={showLastLaunchRefresh} disabled={running}>
+          <Text style={styles.secondaryButtonText}>Show last launch refresh attempt</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.secondaryButton} onPress={testHeadlessRefresh} disabled={running}>

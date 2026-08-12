@@ -22,7 +22,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#121212"
         }
-      ]
+      ],
+      "./plugins/withDisableAllowBackup"
     ],
     "ios": {
       "supportsTablet": true,

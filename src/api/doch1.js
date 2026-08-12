@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import CookieManager from '@preeternal/react-native-cookie-manager';
 import { sha256, base64UrlEncode, randomBytes, asciiBytes } from '../utils/pkce';
 
@@ -382,18 +383,45 @@ const aadAuthority = (tenantId) => `${AAD_LOGIN_ORIGIN}/${tenantId}`;
 // localStorage. username (if present) is the account's UPN, used as
 // login_hint for the silent-SSO fallback so Azure doesn't have to guess which
 // signed-in account to check.
+//
+// This blob is the app's most sensitive at-rest secret: the refresh token
+// silently mints fresh AppCookies (full account + commander access) for the
+// ~month the underlying login lives, with no password. It therefore lives in
+// SecureStore (Android Keystore / iOS Keychain), NOT the plaintext
+// AsyncStorage it used to sit in. getMsalRefreshToken() migrates any legacy
+// AsyncStorage copy across once, silently, so existing installs stay logged
+// in through the upgrade. (Azure refresh tokens can approach SecureStore's
+// ~2 KB Android soft limit; if a future token ever exceeds it, split the
+// secret into SecureStore and keep the non-sensitive tenantId/clientId in
+// AsyncStorage.)
 export async function saveMsalRefreshToken(data) {
   if (!data?.secret) return;
   const prev = (await getMsalRefreshToken()) || {};
-  await AsyncStorage.setItem(MSAL_RT_KEY, JSON.stringify({ ...prev, ...data }));
+  await SecureStore.setItemAsync(MSAL_RT_KEY, JSON.stringify({ ...prev, ...data }));
 }
 
 export async function getMsalRefreshToken() {
-  const raw = await AsyncStorage.getItem(MSAL_RT_KEY);
+  let raw = await SecureStore.getItemAsync(MSAL_RT_KEY);
+  if (!raw) {
+    // One-time migration from the legacy plaintext AsyncStorage location.
+    const legacy = await AsyncStorage.getItem(MSAL_RT_KEY);
+    if (legacy) {
+      try {
+        await SecureStore.setItemAsync(MSAL_RT_KEY, legacy);
+      } catch (_) {
+        // If SecureStore rejects it (e.g. size), leave the legacy copy in
+        // place rather than losing the login; still return it below.
+      }
+      await AsyncStorage.removeItem(MSAL_RT_KEY);
+      raw = legacy;
+    }
+  }
   return raw ? JSON.parse(raw) : null;
 }
 
 async function clearMsalRefreshToken() {
+  await SecureStore.deleteItemAsync(MSAL_RT_KEY);
+  // Also drop any legacy plaintext copy that predates the SecureStore move.
   await AsyncStorage.removeItem(MSAL_RT_KEY);
 }
 
@@ -518,6 +546,11 @@ async function trySsoSilent(rt) {
       ok: false,
       reason: `authorize-no-code: error=${query.error || 'unknown'} desc=${(query.error_description || '').slice(0, 160)} finalUrl=${finalUrl.slice(0, 200)} | ${cookieSummary}`,
     };
+  }
+  // Bind the redirect to our request: reject a code that came back with a
+  // state we didn't send (auth-code / response injection defense-in-depth).
+  if (query.state !== state) {
+    return { ok: false, reason: 'authorize-state-mismatch' };
   }
 
   try {

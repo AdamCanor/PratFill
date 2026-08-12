@@ -4,6 +4,8 @@ import { WebView } from 'react-native-webview';
 import CookieManager from '@preeternal/react-native-cookie-manager';
 import { getFutureReports, getStoredCookieHeader, hasAppCookie, AuthError, clearCookies, attemptSilentReauth, getLastReauthAttempt, refreshAppCookie, testSsoFallback, getMsalRefreshToken, saveMsalRefreshToken, COOKIE_DOMAIN, LOGIN_URL } from '../api/doch1';
 import { getLastAutoSubmitRun } from '../tasks/runAutoSubmit';
+import { getLastLaunchRefresh } from '../utils/launchRefreshLog';
+import { isTrustedWebViewOrigin } from '../hooks/useLoginDetection';
 import { colors, spacing, radius } from '../theme';
 
 // Injected into every top-level document the trace WebView loads (including
@@ -217,6 +219,14 @@ export default function TestConnectionScreen({ navigation }) {
     `path=${c.path ?? '(none)'} domain=${c.domain ?? '(none)'} ` +
     `expires=${c.expires ?? '(session)'} secure=${c.secure ?? false} httpOnly=${c.httpOnly ?? false}`;
 
+  // Live session credentials (AppCookie, the assembled Cookie header) must
+  // never be printed in full to this on-screen, selectable log — this screen
+  // is reachable in release builds via the dev-tools toggle, so a full value
+  // here is a shoulder-surf / screenshot disclosure of a working session.
+  // Show length + short prefix only, matching the refresh-token discipline
+  // already used elsewhere in this screen.
+  const redact = (v) => (v ? `${String(v).slice(0, 12)}… (${String(v).length} chars)` : '(none)');
+
   // Full cookie dump, reused everywhere so every diagnostic shows the
   // complete picture instead of just the one cookie a given action cares
   // about — useful for noticing side effects we didn't expect.
@@ -244,7 +254,7 @@ export default function TestConnectionScreen({ navigation }) {
       append('✅ AppCookie present.');
 
       const header = await getStoredCookieHeader();
-      append(`Cookie header (${header.length} chars): ${header}`);
+      append(`Cookie header: ${redact(header)}`);
 
       const now = new Date();
       append(`Calling getFutureReport(${now.getMonth() + 1}, ${now.getFullYear()})...`);
@@ -299,8 +309,8 @@ export default function TestConnectionScreen({ navigation }) {
       const after = await logAllCookies('--- Cookies AFTER invalidate ---');
       const appCookieAfter = after?.AppCookie?.value;
 
-      append(`AppCookie before: ${appCookieBefore}`);
-      append(`AppCookie after: ${appCookieAfter}`);
+      append(`AppCookie before: ${redact(appCookieBefore)}`);
+      append(`AppCookie after: ${redact(appCookieAfter)}`);
       append(`AppCookie changed: ${appCookieBefore !== appCookieAfter}`);
       if (appCookieAfter === 'invalidated-for-testing') {
         append('✅ Genuinely invalidated this time.');
@@ -325,6 +335,16 @@ export default function TestConnectionScreen({ navigation }) {
     append(JSON.stringify(lastRun, null, 2));
   };
 
+  const showLastLaunchRefresh = async () => {
+    setLog([]);
+    const last = await getLastLaunchRefresh();
+    if (!last) {
+      append('No launch refresh attempt recorded yet.');
+      return;
+    }
+    append(JSON.stringify(last, null, 2));
+  };
+
   const inspectUrl = async (url, label) => {
     setLog([]);
     setRunning(true);
@@ -338,7 +358,7 @@ export default function TestConnectionScreen({ navigation }) {
       const bustedUrl = `${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}`;
       append(`${label}`);
       append(`Request URL: ${bustedUrl}`);
-      append(`Sending cookie header (${cookieHeader.length} chars): ${cookieHeader}`);
+      append(`Sending cookie header: ${redact(cookieHeader)}`);
       const res = await fetch(bustedUrl, {
         redirect: 'follow',
         headers: {
@@ -354,17 +374,25 @@ export default function TestConnectionScreen({ navigation }) {
       append(`type: ${res.type}`);
       append(`final url: ${res.url}`);
       append('--- all response headers ---');
+      // RN's fetch can surface set-cookie (a fresh AppCookie) to JS; redact
+      // any credential-bearing header to length rather than printing it.
+      const SENSITIVE_HDR = /^(set-cookie|cookie|authorization)$/i;
+      const showHdr = (key, value) =>
+        append(`${key}: ${SENSITIVE_HDR.test(key) ? redact(value) : value}`);
       if (res.headers?.forEach) {
-        res.headers.forEach((value, key) => append(`${key}: ${value}`));
+        res.headers.forEach((value, key) => showHdr(key, value));
       } else if (res.headers?.entries) {
-        for (const [key, value] of res.headers.entries()) append(`${key}: ${value}`);
+        for (const [key, value] of res.headers.entries()) showHdr(key, value);
       } else {
         append('(no way to enumerate headers on this platform)');
       }
       const text = await res.text();
       append(`body length: ${text.length} chars`);
-      append('--- full body ---');
-      append(text);
+      // Response bodies here carry personal attendance data (and getUser auth
+      // flags). Show only a bounded preview so the full PII payload isn't
+      // dumped into the selectable log on a release-reachable screen.
+      append('--- body preview (first 300 chars, PII — dev only) ---');
+      append(text.length > 300 ? `${text.slice(0, 300)}…` : text);
 
       await logAllCookies('--- Cookies after request ---');
     } catch (err) {
@@ -508,10 +536,12 @@ export default function TestConnectionScreen({ navigation }) {
       if (msg.found) {
         append(`[rt capture] FOUND key=${msg.key} (${msg.keyLen} chars) fields=[${msg.parsedKeys}]`);
         append(`[rt capture] clientId=${msg.clientId} tenantId=${msg.tenantId} secretLen=${msg.secretLen} username=${msg.username || '(not found)'}`);
-        if (msg.secret && msg.clientId && msg.tenantId) {
+        if (msg.secret && msg.clientId && msg.tenantId && !isTrustedWebViewOrigin(event?.nativeEvent?.url)) {
+          append('⚠️ Refresh token seen from an untrusted origin — not saved.');
+        } else if (msg.secret && msg.clientId && msg.tenantId) {
           try {
             await saveMsalRefreshToken({ secret: msg.secret, clientId: msg.clientId, tenantId: msg.tenantId, username: msg.username || '' });
-            append('✅ Saved to AsyncStorage — "Test headless refresh" should now find it.');
+            append('✅ Saved to secure storage — "Test headless refresh" should now find it.');
           } catch (err) {
             append(`❌ Failed to save: ${err.message}`);
           }
@@ -596,6 +626,14 @@ export default function TestConnectionScreen({ navigation }) {
       append(`Stored token metadata: ${rt ? `tenant=${rt.tenantId}, client=${rt.clientId}, username=${rt.username || '(none captured)'}` : 'NONE — run a login/trace first'}`);
       const before = (await CookieManager.get(COOKIE_DOMAIN))?.AppCookie?.value;
       append(`AppCookie before: ${before ? `${before.slice(0, 16)}… (${before.length} chars)` : '(none)'}`);
+
+      // The Azure session cookies are what the silent SSO path actually rides
+      // on — dump them so a login_required failure is diagnosable (was an
+      // ESTSAUTH cookie even present, and if so is it persistent or expired?).
+      const aadCookies = (await CookieManager.get('https://login.microsoftonline.com')) || {};
+      const aadNames = Object.keys(aadCookies);
+      append(`Azure SSO cookies (login.microsoftonline.com) — ${aadNames.length}: ${aadNames.join(', ') || '(none)'}`);
+      aadNames.forEach((name) => append(describeCookie(name, aadCookies[name])));
 
       append('Calling testSsoFallback() — forces the /authorize?prompt=none path...');
       const res = await testSsoFallback();
@@ -700,6 +738,10 @@ export default function TestConnectionScreen({ navigation }) {
 
         <TouchableOpacity style={styles.secondaryButton} onPress={showLastAutoSubmitRun} disabled={running}>
           <Text style={styles.secondaryButtonText}>Show last auto-submit run</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.secondaryButton} onPress={showLastLaunchRefresh} disabled={running}>
+          <Text style={styles.secondaryButtonText}>Show last launch refresh attempt</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.secondaryButton} onPress={testHeadlessRefresh} disabled={running}>

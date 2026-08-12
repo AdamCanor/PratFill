@@ -60,10 +60,26 @@ export const MSAL_RT_CAPTURE_JS = `
 })();
 `;
 
+// Origins the login WebViews legitimately load: the IDF portal (where MSAL.js
+// runs and keeps its tokens) and Microsoft's sign-in host. A refresh token is
+// trusted only when its message arrives from one of these — a postMessage from
+// any other page the WebView might be steered to is ignored, so a forged token
+// can't be planted from off-origin content.
+export const TRUSTED_WEBVIEW_ORIGINS = [
+  'https://one.prat.idf.il',
+  'https://login.microsoftonline.com',
+];
+
+export function isTrustedWebViewOrigin(url) {
+  const u = String(url || '');
+  return TRUSTED_WEBVIEW_ORIGINS.some((o) => u === o || u.startsWith(o + '/'));
+}
+
 // onMessage handler for the login WebViews — persists a captured refresh
 // token. Safe to wire on any WebView that injects MSAL_RT_CAPTURE_JS.
 export async function handleLoginWebViewMessage(event) {
   try {
+    if (!isTrustedWebViewOrigin(event?.nativeEvent?.url)) return;
     const msg = JSON.parse(event?.nativeEvent?.data);
     if (msg?.__msalRt && msg.secret && msg.tenantId && msg.clientId) {
       await saveMsalRefreshToken({ secret: msg.secret, clientId: msg.clientId, tenantId: msg.tenantId, username: msg.username || '' });

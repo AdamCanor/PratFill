@@ -80,17 +80,19 @@ Key endpoints:
 - `src/data/statuses.js` contains hardcoded fallback statuses used when the API is unavailable.
 
 ## Native project (`android/`)
-`android/` is committed so CI skips `expo prebuild`. Only re-run prebuild when adding/removing packages that have native Android code:
+`android/` is committed, and CI (`build-apk-debug.yml` / `release.yml`) builds straight from it with `npm ci` + Gradle — CI itself does not run `expo prebuild`. Reach for a native module whenever it's the right tool; just run prebuild when you add or remove one so the committed `android/` matches the JS deps:
 
 ```bash
 npx expo prebuild -p android
-git add android/
+git add android/ package.json package-lock.json
 git commit -m "Update android/ after adding <package>"
 ```
 
-Pure JS changes do not require a prebuild.
-
-Avoiding prebuild is a preference for convenience (it's friction, and it can't be verified from a sandbox without an Android build), not a hard constraint — it does not outrank the actual functionality being built. If a feature genuinely needs a native module or native code, do the prebuild; don't contort the implementation (e.g. hand-rolling something a native module would do better) just to dodge it. When a prebuild does happen, get it verified via a real build (e.g. dispatching `build-apk-debug.yml`) before relying on it, since it can't be compile-checked here.
+Pure JS changes do not require a prebuild. Notes from experience:
+- **Keep `package-lock.json` in sync.** CI runs `npm ci`, which hard-fails when the lockfile doesn't match `package.json`. Always `npm install` after a dependency change and commit the updated lock.
+- **Config plugins run only at prebuild time.** Native manifest/gradle settings that must survive a future prebuild belong in a config plugin (e.g. `plugins/withDisableAllowBackup.js`), not as hand edits to `android/` — prebuild regenerates the manifest and silently reverts hand edits.
+- **Review the prebuild diff before committing.** Prebuild can touch unrelated fields (e.g. reset `versionCode`, rewrite `expo_runtime_version`); revert collateral it introduces so the diff stays scoped to the change you intended.
+- Verify native changes with a real build (dispatch `build-apk-debug.yml`) — they can't be compile-checked in the sandbox.
 
 ## Development workflow
 - **Local testing:** `npx expo start --lan` — connects a physical phone on the same network via Expo Go.

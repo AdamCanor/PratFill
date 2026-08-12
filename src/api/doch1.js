@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import CookieManager from '@preeternal/react-native-cookie-manager';
 import { sha256, base64UrlEncode, randomBytes, asciiBytes } from '../utils/pkce';
 
@@ -35,6 +36,25 @@ export async function getStoredCookieHeader() {
 async function getCookieHeaderForDomain(domain) {
   const cookies = await CookieManager.get(domain);
   return buildCookieHeader(cookies);
+}
+
+// Diagnostic-only summary of the Azure SSO cookie jar (login.microsoftonline.com),
+// for folding into a failure reason. Reports cookie NAMES only — never their
+// values, since a cookie value here IS the session secret — plus the count, the
+// built Cookie-header length, and the presence/expiry of the two Azure session
+// cookies. This is what lets a silent-SSO login_required failure (AADSTS50058)
+// say whether we even had an ESTSAUTH cookie to send (never captured → Case A)
+// versus sent one Azure rejected (expired/session-only → Case B); the raw
+// AADSTS50058 text is identical either way.
+async function summarizeAadCookies() {
+  try {
+    const jar = (await CookieManager.get(AAD_LOGIN_ORIGIN)) || {};
+    const names = Object.keys(jar);
+    const note = (n) => (jar[n] ? `${n}(exp=${jar[n].expires || 'session'})` : `${n}=absent`);
+    return `aadCookies=[${names.join(',') || 'none'}] count=${names.length} headerLen=${buildCookieHeader(jar).length} ${note('ESTSAUTHPERSISTENT')} ${note('ESTSAUTH')}`;
+  } catch (e) {
+    return `aadCookies=error:${String(e?.message || e).slice(0, 80)}`;
+  }
 }
 
 export async function hasAppCookie() {
@@ -363,18 +383,45 @@ const aadAuthority = (tenantId) => `${AAD_LOGIN_ORIGIN}/${tenantId}`;
 // localStorage. username (if present) is the account's UPN, used as
 // login_hint for the silent-SSO fallback so Azure doesn't have to guess which
 // signed-in account to check.
+//
+// This blob is the app's most sensitive at-rest secret: the refresh token
+// silently mints fresh AppCookies (full account + commander access) for the
+// ~month the underlying login lives, with no password. It therefore lives in
+// SecureStore (Android Keystore / iOS Keychain), NOT the plaintext
+// AsyncStorage it used to sit in. getMsalRefreshToken() migrates any legacy
+// AsyncStorage copy across once, silently, so existing installs stay logged
+// in through the upgrade. (Azure refresh tokens can approach SecureStore's
+// ~2 KB Android soft limit; if a future token ever exceeds it, split the
+// secret into SecureStore and keep the non-sensitive tenantId/clientId in
+// AsyncStorage.)
 export async function saveMsalRefreshToken(data) {
   if (!data?.secret) return;
   const prev = (await getMsalRefreshToken()) || {};
-  await AsyncStorage.setItem(MSAL_RT_KEY, JSON.stringify({ ...prev, ...data }));
+  await SecureStore.setItemAsync(MSAL_RT_KEY, JSON.stringify({ ...prev, ...data }));
 }
 
 export async function getMsalRefreshToken() {
-  const raw = await AsyncStorage.getItem(MSAL_RT_KEY);
+  let raw = await SecureStore.getItemAsync(MSAL_RT_KEY);
+  if (!raw) {
+    // One-time migration from the legacy plaintext AsyncStorage location.
+    const legacy = await AsyncStorage.getItem(MSAL_RT_KEY);
+    if (legacy) {
+      try {
+        await SecureStore.setItemAsync(MSAL_RT_KEY, legacy);
+      } catch (_) {
+        // If SecureStore rejects it (e.g. size), leave the legacy copy in
+        // place rather than losing the login; still return it below.
+      }
+      await AsyncStorage.removeItem(MSAL_RT_KEY);
+      raw = legacy;
+    }
+  }
   return raw ? JSON.parse(raw) : null;
 }
 
 async function clearMsalRefreshToken() {
+  await SecureStore.deleteItemAsync(MSAL_RT_KEY);
+  // Also drop any legacy plaintext copy that predates the SecureStore move.
   await AsyncStorage.removeItem(MSAL_RT_KEY);
 }
 
@@ -478,6 +525,10 @@ async function trySsoSilent(rt) {
   })}`;
 
   let authRes;
+  // Captured before the request so it's available in every failure branch —
+  // tells us which Azure session cookies we actually had to send (see
+  // summarizeAadCookies).
+  const cookieSummary = await summarizeAadCookies();
   try {
     const cookieHeader = await getCookieHeaderForDomain(AAD_LOGIN_ORIGIN);
     authRes = await fetch(authorizeUrl, {
@@ -485,7 +536,7 @@ async function trySsoSilent(rt) {
       headers: cookieHeader ? { cookie: cookieHeader } : undefined,
     });
   } catch (e) {
-    return { ok: false, reason: `authorize-network-error: ${String(e?.message || e).slice(0, 160)}` };
+    return { ok: false, reason: `authorize-network-error: ${String(e?.message || e).slice(0, 160)} | ${cookieSummary}` };
   }
 
   const finalUrl = authRes?.url || '';
@@ -493,8 +544,13 @@ async function trySsoSilent(rt) {
   if (!query.code) {
     return {
       ok: false,
-      reason: `authorize-no-code: error=${query.error || 'unknown'} desc=${(query.error_description || '').slice(0, 160)} finalUrl=${finalUrl.slice(0, 200)}`,
+      reason: `authorize-no-code: error=${query.error || 'unknown'} desc=${(query.error_description || '').slice(0, 160)} finalUrl=${finalUrl.slice(0, 200)} | ${cookieSummary}`,
     };
+  }
+  // Bind the redirect to our request: reject a code that came back with a
+  // state we didn't send (auth-code / response injection defense-in-depth).
+  if (query.state !== state) {
+    return { ok: false, reason: 'authorize-state-mismatch' };
   }
 
   try {

@@ -100,9 +100,9 @@ Pure JS changes do not require a prebuild. Notes from experience:
 - **Branch creation:** always create new Claude branches from `dev`, not `main`, unless explicitly told otherwise — `dev` has the latest merged work and branching from `main` risks stale-base merge conflicts.
 - **Merging:** when work is ready, merge `claude/main` → `dev` via PR, then `dev` → `main` for a release.
 - **No CI on `dev`** — `dev` pushes trigger nothing.
-- **Release:** merge `dev` → `main` via PR. On `main` push, `release.yml` builds a production APK and publishes a GitHub Release tagged `v{version}-{sha}`.
+- **Release:** merge `dev` → `main` via PR. On `main` push, `release.yml` builds a production APK and publishes a GitHub Release tagged `v{version}-{sha}`. **Bump `version` in `package.json` (and `app.json`) as part of any change you want released** — a `check` job skips the build entirely when a release for the current version already exists, so pushes to `main` that don't bump the version (docs, README, CI tweaks) publish nothing.
 - **GitHub Actions workflows (all in `.github/workflows/`):**
-  - `release.yml` — auto on `main` push; builds release APK, creates GitHub Release
+  - `release.yml` — auto on `main` push; skips unless `package.json` `version` is unreleased, then builds release APK and creates a GitHub Release
   - `build-apk-release.yml` — manual dispatch only; builds release APK, uploads as artifact (useful for testing release builds without merging to main)
   - `build-apk-debug.yml` — manual dispatch only; builds debug APK, uploads as artifact
 - Merge PRs via `mcp__github__merge_pull_request` (owner: `AdamCanor`, repo: `PratFill`).

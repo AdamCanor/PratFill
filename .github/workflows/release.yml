@@ -9,7 +9,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # Only build and publish when package.json carries a version that has not
+      # been released yet. Without this, every push to main (a docs tweak, a
+      # README fix) republishes the same version under a new tag.
+      - name: Check whether this version was already released
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          # Tags are v{version}-{sha}, so match on the version prefix.
+          ESCAPED=$(printf '%s' "$VERSION" | sed 's/\./\\./g')
+          if gh release list --limit 200 --json tagName --jq '.[].tagName' \
+              | grep -qE "^v${ESCAPED}(-|$)"; then
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "::notice::v${VERSION} is already released — skipping. Bump the version in package.json and app.json to cut a new release."
+          else
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "::notice::v${VERSION} has not been released yet — building."
+          fi
+
   release:
+    needs: check
+    if: needs.check.outputs.should_release == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -55,7 +90,7 @@ jobs:
       - name: Get release tag
         id: tag
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          VERSION="${{ needs.check.outputs.version }}"
           SHA=$(git rev-parse --short HEAD)
           echo "tag=v${VERSION}-${SHA}" >> $GITHUB_OUTPUT
           echo "title=v${VERSION}" >> $GITHUB_OUTPUT

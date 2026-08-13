@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PratFill — הורדה</title>
+<meta name="description" content="מילוי דיווחי נוכחות עתידיים מול מערכת דוח 1 של צה&quot;ל — באופן אוטומטי.">
+<meta name="theme-color" content="#121212">
+<link rel="icon" href="icon.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="PratFill — דוח 1, בלי לפתוח דבר">
+<meta property="og:description" content="מילוי דיווחי נוכחות עתידיים מול מערכת דוח 1 של צה&quot;ל — באופן אוטומטי.">
+<meta property="og:image" content="icon.png">
+<style>
+  :root {
+    --bg: #121212;
+    --surface: #1B1B1B;
+    --border: #2A2A2A;
+    --text: #F2F2F2;
+    --muted: #9A9A9A;
+    --accent: #E8C547;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Rubik,
+                 "Noto Sans Hebrew", "Arial Hebrew", Arial, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -webkit-text-size-adjust: 100%;
+    display: flex;
+    justify-content: center;
+    min-height: 100dvh;
+    padding: 2.5rem 1.25rem 2rem;
+  }
+
+  main {
+    width: 100%;
+    max-width: 26rem;
+    text-align: center;
+    animation: rise 0.5s ease-out both;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    main { animation: none; }
+  }
+
+  .icon {
+    width: 6rem;
+    height: 6rem;
+    border-radius: 22%;
+    display: block;
+    margin: 0 auto 1.25rem;
+  }
+
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  .tagline {
+    color: var(--accent);
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0.35rem 0 0;
+  }
+
+  .description {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin: 0.75rem 0 0;
+  }
+
+  .download {
+    display: block;
+    max-width: 20rem;
+    margin: 2rem auto 0;
+    padding: 1.1rem 1.5rem;
+    background: var(--accent);
+    color: var(--bg);
+    font-size: 1.15rem;
+    font-weight: 700;
+    text-decoration: none;
+    border-radius: 14px;
+    transition: transform 0.12s ease, filter 0.12s ease;
+  }
+
+  .download:active {
+    transform: scale(0.98);
+    filter: brightness(0.92);
+  }
+
+  .releases {
+    display: inline-block;
+    margin-top: 0.9rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-decoration: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .releases:active { color: var(--text); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.25rem 1.4rem;
+    margin-top: 2.25rem;
+    text-align: right;
+  }
+
+  .card h2 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0 0 0.75rem;
+  }
+
+  ol {
+    margin: 0;
+    padding-inline-start: 1.2rem;
+    font-size: 0.92rem;
+    color: var(--muted);
+  }
+
+  ol li + li { margin-top: 0.5rem; }
+
+  ol strong { color: var(--text); font-weight: 600; }
+
+  .features {
+    margin-top: 2.25rem;
+    text-align: right;
+  }
+
+  .features h2 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0 0 0.75rem;
+  }
+
+  .features ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+
+  .features li {
+    position: relative;
+    padding-inline-start: 1.4rem;
+  }
+
+  .features li + li { margin-top: 0.4rem; }
+
+  .features li::before {
+    content: "✓";
+    position: absolute;
+    inset-inline-start: 0;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .highlight {
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 14px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.1rem;
+  }
+
+  .highlight h3 {
+    font-size: 0.98rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 0 0 0.3rem;
+  }
+
+  .highlight p {
+    font-size: 0.9rem;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  footer {
+    margin-top: 2.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  footer a {
+    color: var(--muted);
+    text-decoration: underline;
+  }
+
+  footer p { margin: 0.35rem 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <img class="icon" src="icon.png" alt="סמל PratFill" width="96" height="96">
+
+  <h1>PratFill</h1>
+  <p class="tagline">דוח 1, בלי לפתוח דבר</p>
+  <p class="description">מילוי דיווחי נוכחות עתידיים מול מערכת דוח 1 של צה"ל — באופן אוטומטי.</p>
+
+  <a class="download" href="https://github.com/AdamCanor/PratFill/releases/latest/download/app-release.apk">⬇ הורדת האפליקציה</a>
+  <a class="releases" href="https://github.com/AdamCanor/PratFill/releases/latest">כל הגרסאות והערות שחרור</a>
+
+  <section class="card">
+    <h2>איך מתקינים?</h2>
+    <ol>
+      <li>לוחצים על כפתור ההורדה למעלה.</li>
+      <li>כשההורדה מסתיימת, פותחים את הקובץ — מההתראה או מתיקיית ההורדות.</li>
+      <li>אם אנדרואיד מבקש, מאשרים <strong>התקנה ממקורות לא ידועים</strong> (״אפשר מהמקור הזה״) וחוזרים אחורה.</li>
+      <li>מתקינים, פותחים את האפליקציה ומתחברים כרגיל.</li>
+    </ol>
+  </section>
+
+  <section class="features">
+    <h2>מה האפליקציה עושה</h2>
+
+    <div class="highlight">
+      <h3>⚡ דיווח יומי אוטומטי</h3>
+      <p>האפליקציה מגישה את הדיווחים לבד, כל יום, ברקע — בלי שתצטרכו לפתוח אותה. היא ממלאת כל יום שעדיין לא דווח בשבוע הקרוב לפי התבנית שלכם, ושולחת התראה רק כשצריך.</p>
+    </div>
+
+    <ul>
+      <li>מילוי שבוע שלם בלחיצה אחת, לפי תבנית אישית לשבוע</li>
+      <li>שני כפתורים מהירים לסטטוסים שמשתמשים בהם הכי הרבה</li>
+      <li>מצב מפקד — עדכון סטטוס לחיילים בצוות ישירות מהאפליקציה</li>
+      <li>בחירת צבע הדגשה אישי</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p>לאנדרואיד בלבד</p>
+    <p><a href="https://github.com/AdamCanor/PratFill">הקוד ב-GitHub</a></p>
+  </footer>
+</main>
+</body>
+</html>

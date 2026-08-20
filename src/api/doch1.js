@@ -485,13 +485,23 @@ async function redeemRefreshToken(rt) {
         ok: false,
         reason: `token-${tokenRes.status}:${errCode} ${errText.slice(0, 160)}`,
         retryWithSso: tokenRes.status === 400 && errCode === 'invalid_grant',
+        // Azure being down or throttling us says nothing about whether the
+        // login is still alive — see the `transient` note on refreshAppCookie.
+        transient: tokenRes.status >= 500 || tokenRes.status === 429,
       };
     }
     const tokens = await tokenRes.json();
     if (!tokens?.id_token) return { ok: false, reason: 'no-id-token', retryWithSso: false };
     return { ok: true, idToken: tokens.id_token, refreshToken: tokens.refresh_token };
   } catch (e) {
-    return { ok: false, reason: String(e?.message || e).slice(0, 200), retryWithSso: false };
+    // The request never completed (offline, DNS, timeout) — no verdict on the
+    // token itself, so this must never be read as "the login died".
+    return {
+      ok: false,
+      reason: String(e?.message || e).slice(0, 200),
+      retryWithSso: false,
+      transient: true,
+    };
   }
 }
 
@@ -536,7 +546,11 @@ async function trySsoSilent(rt) {
       headers: cookieHeader ? { cookie: cookieHeader } : undefined,
     });
   } catch (e) {
-    return { ok: false, reason: `authorize-network-error: ${String(e?.message || e).slice(0, 160)} | ${cookieSummary}` };
+    return {
+      ok: false,
+      reason: `authorize-network-error: ${String(e?.message || e).slice(0, 160)} | ${cookieSummary}`,
+      transient: true,
+    };
   }
 
   const finalUrl = authRes?.url || '';
@@ -550,7 +564,9 @@ async function trySsoSilent(rt) {
   // Bind the redirect to our request: reject a code that came back with a
   // state we didn't send (auth-code / response injection defense-in-depth).
   if (query.state !== state) {
-    return { ok: false, reason: 'authorize-state-mismatch' };
+    // Not evidence of a dead login (and not something the user can fix by
+    // logging in again) — keep the stored token and retry next run.
+    return { ok: false, reason: 'authorize-state-mismatch', transient: true };
   }
 
   try {
@@ -569,13 +585,21 @@ async function trySsoSilent(rt) {
     });
     if (!tokenRes.ok) {
       const errText = await tokenRes.text().catch(() => '');
-      return { ok: false, reason: `sso-token-${tokenRes.status}: ${errText.slice(0, 160)}` };
+      return {
+        ok: false,
+        reason: `sso-token-${tokenRes.status}: ${errText.slice(0, 160)}`,
+        transient: tokenRes.status >= 500 || tokenRes.status === 429,
+      };
     }
     const tokens = await tokenRes.json();
     if (!tokens?.id_token) return { ok: false, reason: 'sso-no-id-token' };
     return { ok: true, idToken: tokens.id_token, refreshToken: tokens.refresh_token };
   } catch (e) {
-    return { ok: false, reason: `sso-token-network-error: ${String(e?.message || e).slice(0, 160)}` };
+    return {
+      ok: false,
+      reason: `sso-token-network-error: ${String(e?.message || e).slice(0, 160)}`,
+      transient: true,
+    };
   }
 }
 
@@ -585,20 +609,50 @@ async function finishSessionRefresh(idToken, rt, rotatedRefreshToken) {
   if (rotatedRefreshToken) await saveMsalRefreshToken({ ...rt, secret: rotatedRefreshToken });
 
   const cookieHeader = await getStoredCookieHeader();
-  const loginRes = await fetch(`${BASE_URL}/api/account/login`, {
-    headers: {
-      accept: 'application/json, text/plain, */*',
-      authorization: idToken,
-      ...(cookieHeader ? { cookie: cookieHeader } : {}),
-    },
-  });
-  if (!loginRes.ok) return { ok: false, attempted: true, reason: `login-${loginRes.status}` };
+  let loginRes;
+  try {
+    loginRes = await fetch(`${BASE_URL}/api/account/login`, {
+      headers: {
+        accept: 'application/json, text/plain, */*',
+        authorization: idToken,
+        ...(cookieHeader ? { cookie: cookieHeader } : {}),
+      },
+    });
+  } catch (e) {
+    return {
+      ok: false,
+      attempted: true,
+      transient: true,
+      reason: `login-network-error: ${String(e?.message || e).slice(0, 160)}`,
+    };
+  }
+  if (!loginRes.ok) {
+    return {
+      ok: false,
+      attempted: true,
+      // We just minted a valid id_token, so the login is provably alive — a
+      // failure at this last hop is the portal's problem, never the user's.
+      transient: true,
+      reason: `login-${loginRes.status}`,
+    };
+  }
 
   try {
     await CookieManager.flush?.();
   } catch (_) {}
-  const verify = await getUser();
-  if (verify?.isUserAuth) return { ok: true, attempted: true };
+  try {
+    const verify = await getUser();
+    if (verify?.isUserAuth) return { ok: true, attempted: true };
+  } catch (e) {
+    // An AuthError here is a real verdict (the fresh cookie was rejected);
+    // anything else is the network failing on the way to asking.
+    return {
+      ok: false,
+      attempted: true,
+      transient: !(e instanceof AuthError),
+      reason: `verify-error: ${String(e?.message || e).slice(0, 160)}`,
+    };
+  }
   return { ok: false, attempted: true, reason: 'login-ok-but-getuser-unauth' };
 }
 
@@ -614,12 +668,17 @@ export async function testSsoFallback() {
 }
 
 // Ensure there's a working session, refreshing a dead AppCookie headlessly if
-// possible. Returns { ok, attempted }:
+// possible. Returns { ok, attempted, transient, reason }:
 //   ok        — we now have a live session (getUser confirms it).
-//   attempted — whether a real refresh was tried. Lets the caller tell a
-//               genuine long-login death (attempted && !ok → notify
-//               "re-login required") apart from "nothing to try" (no stored
-//               refresh token yet).
+//   attempted — whether a real refresh was tried.
+//   transient — the attempt failed without ever getting a verdict on the
+//               login: the request never completed (offline, DNS, timeout) or
+//               a server answered 5xx/429. This is the difference between
+//               "your login expired, go log in" and "the phone had no signal
+//               at 3am" — the background worker words its notification from
+//               it, and it also decides whether we're allowed to throw away
+//               the stored refresh token (never on a transient failure: that
+//               would turn a network blip into a real logout).
 export async function refreshAppCookie() {
   try {
     const user = await getUser();
@@ -644,7 +703,7 @@ export async function refreshAppCookie() {
       // Not a "refresh token is dead" failure (network blip, bad config) —
       // retrying via SSO wouldn't help, and the token might still be good
       // next time, so don't clear it.
-      return { ok: false, attempted: true, reason: direct.reason };
+      return { ok: false, attempted: true, transient: Boolean(direct.transient), reason: direct.reason };
     }
 
     // Fallback: the cached refresh token is genuinely dead, but the
@@ -653,11 +712,25 @@ export async function refreshAppCookie() {
     const sso = await trySsoSilent(rt);
     if (sso.ok) return finishSessionRefresh(sso.idToken, rt, sso.refreshToken);
 
-    // Both mechanisms failed — the long-lived login really is dead.
-    await clearMsalRefreshToken();
-    return { ok: false, attempted: true, reason: `direct:${direct.reason} | sso:${sso.reason}` };
+    // Both mechanisms failed. Only clear the stored token when the SSO leg
+    // actually reached Azure and got told no — if it never completed we have
+    // no verdict, and dropping the token here would delete the tenant/client
+    // metadata the SSO fallback needs, permanently downgrading a temporary
+    // outage into "no-refresh-token" (a real re-login) on every later run.
+    if (!sso.transient) await clearMsalRefreshToken();
+    return {
+      ok: false,
+      attempted: true,
+      transient: Boolean(sso.transient),
+      reason: `direct:${direct.reason} | sso:${sso.reason}`,
+    };
   } catch (e) {
-    return { ok: false, attempted: true, reason: String(e?.message || e).slice(0, 200) };
+    return {
+      ok: false,
+      attempted: true,
+      transient: true,
+      reason: String(e?.message || e).slice(0, 200),
+    };
   }
 }
 

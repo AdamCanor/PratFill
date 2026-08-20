@@ -3,7 +3,6 @@ import {
   runAutoSubmit,
   shouldNotifyAuthFailure,
   markAuthFailureNotified,
-  hasNotifiedAuthFailure,
   isAutoSubmitEnabled,
   canSendNotificationToday,
   markNotificationSent,
@@ -17,12 +16,20 @@ try {
   const BackgroundTask = require('expo-background-task');
   const Notifications = require('expo-notifications');
 
-  async function notifyReloginNeeded() {
+  // Worded from what actually failed: claiming the login expired when the
+  // phone simply had no network at 3am sends the user to re-login for
+  // nothing (and teaches them to ignore the notification).
+  async function notifySessionProblem({ transient }) {
     await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'PratFill — נדרשת התחברות',
-        body: 'פג תוקף ההתחברות. פתח את האפליקציה כדי לחדש.',
-      },
+      content: transient
+        ? {
+            title: 'PratFill — הדיווח האוטומטי לא רץ',
+            body: 'לא הצלחנו להתחבר לשרת. פתח את האפליקציה כדי להשלים את הדיווחים.',
+          }
+        : {
+            title: 'PratFill — נדרשת התחברות',
+            body: 'פג תוקף ההתחברות. פתח את האפליקציה כדי לחדש.',
+          },
       trigger: null,
     });
   }
@@ -30,8 +37,10 @@ try {
   // The autonomous daily flow: get a working session on our own (refreshing a
   // dead AppCookie headlessly if the mechanism is wired up), then fill the
   // week — all without the user opening the app. runAutoSubmit owns the
-  // *success* notification (gated by the user's daily/weekly setting); the
-  // worker owns the *death* notification.
+  // *state* notification, which every successful run sends (gated by the
+  // user's daily/weekly setting) so "everything is already covered" is heard
+  // as reassurance rather than silence; the worker owns the *session-problem*
+  // notification, sent only when that state is actually at risk.
   TaskManager.defineTask(TASK_NAME, async () => {
     try {
       // Do nothing (no network, no notifications) when the user hasn't
@@ -47,28 +56,17 @@ try {
         return BackgroundTask.BackgroundTaskResult.Success;
       }
 
-      // Couldn't establish a session.
-      if (session.attempted) {
-        // A real headless refresh was tried and failed — the long-lived
-        // login is genuinely dead and only a manual re-login can recover it.
-        // Always surface this, but once per death (cleared on next success)
-        // and never more than one notification a day overall.
-        if (!(await hasNotifiedAuthFailure()) && (await canSendNotificationToday())) {
-          await notifyReloginNeeded();
-          await markAuthFailureNotified();
-          await markNotificationSent();
-        }
-      } else {
-        // No headless refresh wired up yet (the portal's silent-refresh
-        // mechanism is still being identified — see refreshAppCookie in
-        // doch1.js). We can't tell a recoverable short-cookie death from a
-        // real one here, so fall back to the conservative coverage-based
-        // throttle instead of nagging every fire.
-        if ((await shouldNotifyAuthFailure()) && (await canSendNotificationToday())) {
-          await notifyReloginNeeded();
-          await markAuthFailureNotified();
-          await markNotificationSent();
-        }
+      // Couldn't establish a session. A failed run is not by itself worth
+      // waking the user: AppCookie dying between runs is the NORMAL state,
+      // the next fire is only ~6h away, and there is nothing to act on while
+      // the days ahead are already reported. So notify only while coverage is
+      // actually at risk (or was never established) — shouldNotifyAuthFailure
+      // owns that judgement, plus the once-per-death dedup — and never more
+      // than one notification a day overall.
+      if ((await shouldNotifyAuthFailure()) && (await canSendNotificationToday())) {
+        await notifySessionProblem({ transient: session.transient });
+        await markAuthFailureNotified();
+        await markNotificationSent();
       }
       return BackgroundTask.BackgroundTaskResult.Failed;
     } catch (e) {
@@ -76,7 +74,7 @@ try {
       // death, throttled the same conservative way.
       if (e instanceof AuthError) {
         if ((await shouldNotifyAuthFailure()) && (await canSendNotificationToday())) {
-          await notifyReloginNeeded();
+          await notifySessionProblem({ transient: false });
           await markAuthFailureNotified();
           await markNotificationSent();
         }

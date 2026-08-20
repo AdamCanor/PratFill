@@ -37,12 +37,15 @@ export async function getAutoSubmitCoverage() {
   return raw ? JSON.parse(raw) : null;
 }
 
-// An AuthError is worth a notification only while it threatens actual
+// A session failure is worth a notification only while it threatens actual
 // coverage. AppCookie dies ~5h after every login, so the background task
-// failing is the NORMAL state between app opens — notifying on every failure
-// would spam. Instead: stay quiet while filled days remain comfortably ahead,
-// and notify at most once per cookie-death (flag cleared on the next
-// successful run).
+// failing is the NORMAL state between app opens, and a failure the user can
+// do nothing useful about (their days are already filled) is noise — worse,
+// it's usually worded as "you must log in again" when the truth may be a
+// network blip. Instead: stay quiet while filled days remain comfortably
+// ahead, and notify at most once per death (flag cleared on the next
+// successful run). This is the single gate for every session-failure
+// notification the worker sends — the dedup below is part of it.
 const COVERAGE_AT_RISK_MS = 2 * 24 * 60 * 60 * 1000;
 
 export async function shouldNotifyAuthFailure() {
@@ -56,19 +59,10 @@ export async function markAuthFailureNotified() {
   await AsyncStorage.setItem(AUTH_NOTIFIED_KEY, new Date().toISOString());
 }
 
-// A genuine long-login death should always be surfaced — but still only once
-// per death, not on every ~daily fire. The worker uses this for the
-// "attempted a real refresh and it failed" case, where coverage is irrelevant
-// (the user must re-login regardless of how many days are still filled).
-export async function hasNotifiedAuthFailure() {
-  return Boolean(await AsyncStorage.getItem(AUTH_NOTIFIED_KEY));
-}
-
-// Success-notification cadence. Because a new future day unlocks daily, a
-// successful run fills a new day almost every day — so notifying on every
-// fill ('daily') is effectively a daily heartbeat, while 'weekly' collapses
-// that to at most one success notification per 7 days. Death notifications
-// are governed separately and always fire.
+// State-notification cadence. Every successful run reports where the week
+// ahead stands (days filled, or that everything is already covered), so
+// 'daily' is a once-a-day heartbeat and 'weekly' collapses it to at most one
+// per 7 days. Session-problem notifications are governed separately.
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function shouldNotifySuccess(mode) {
@@ -82,14 +76,16 @@ async function markSuccessNotified() {
   await AsyncStorage.setItem(SUCCESS_NOTIFIED_KEY, new Date().toISOString());
 }
 
-// Hard cap shared across BOTH notification types (success and re-login):
+// Hard cap shared across BOTH notification types (weekly state and session
+// failure):
 // at most one notification, of either kind, per rolling 24h — regardless of
 // how many times the worker fires in that window (currently ~every 6h) or
 // how many separate things happened. This is a backstop, not the primary
-// throttle — success already limits itself via successNotify, and re-login
-// via the once-per-death dedup above — but neither of those alone rules out
-// e.g. a partial-fill retry or a session dying later the same day as an
-// earlier success, each independently deciding to notify. Every notification
+// throttle — the state notification already limits itself via successNotify,
+// and the session one via the coverage gate + once-per-death dedup above —
+// but neither of those alone rules out e.g. a partial-fill retry or a session
+// dying later the same day as an earlier state notification, each
+// independently deciding to notify. Every notification
 // site must check this immediately before sending and call
 // markNotificationSent() immediately after.
 const NOTIFICATION_COOLDOWN_MS = 24 * 60 * 60 * 1000;
@@ -132,27 +128,43 @@ export async function runAutoSubmit() {
     const reportedDates = new Set(allReports.map(normalizeDate));
 
     let count = 0;
+    let alreadyReported = 0;
     for (const { date, apiDate } of upcoming) {
-      if (reportedDates.has(apiDate)) continue;
+      if (reportedDates.has(apiDate)) {
+        alreadyReported++;
+        continue;
+      }
       const dayOfWeek = date.getDay();
       const defaults = preset.weeklyDefaults?.[dayOfWeek];
+      // A day the preset deliberately leaves blank stays unreported — it
+      // still counts against the window in the state line below, so "5 מתוך
+      // 7" tells the user something real instead of silently rounding up.
       if (!defaults) continue;
       await insertFutureReport({ ...defaults, date: apiDate });
       count++;
     }
 
-    // Only notify when we actually filled something (quiet-by-default), only
-    // as often as the user's chosen cadence allows, and never more than once
-    // a day overall (shared cap with the re-login notification).
+    // Every successful run reports the state of the week ahead, including
+    // the "nothing to do, you're covered" case: silence is ambiguous (it
+    // reads the same as the task never having run), and the whole point of a
+    // background filler the user never opens is knowing where they stand.
+    // Cadence is still the user's (daily/weekly), and never more than one
+    // notification a day overall (shared cap with the session notification).
+    const total = upcoming.length;
+    const reported = alreadyReported + count;
+    const stateLine =
+      reported === total
+        ? `כל ${total} הימים הקרובים מדווחים`
+        : `${reported} מתוך ${total} הימים הקרובים מדווחים`;
+
     if (
-      count > 0 &&
       (await shouldNotifySuccess(settings.autoSubmit?.successNotify)) &&
       (await canSendNotificationToday())
     ) {
       await Notifications.scheduleNotificationAsync({
         content: {
           title: 'PratFill',
-          body: `נוספו דיווחים אוטומטיים ל-${count} ימים`,
+          body: count > 0 ? `נוספו דיווחים אוטומטיים ל-${count} ימים · ${stateLine}` : stateLine,
         },
         trigger: null,
       });
@@ -171,6 +183,8 @@ export async function runAutoSubmit() {
 
     const result = {
       count,
+      reported,
+      total,
       coveredThrough,
       diagnostics: { appCookiePresentAtStart },
     };

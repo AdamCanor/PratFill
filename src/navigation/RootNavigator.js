@@ -14,8 +14,9 @@ import SettingsDevScreen from '../screens/SettingsDevScreen';
 import TestConnectionScreen from '../screens/TestConnectionScreen';
 import { getUser, refreshAppCookie, refreshStatuses } from '../api/doch1';
 import SessionRefreshWebView from '../components/SessionRefreshWebView';
+import LaunchSteps from '../components/LaunchSteps';
 import { recordLaunchRefresh } from '../utils/launchRefreshLog';
-import { colors } from '../theme';
+import { colors, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator();
@@ -29,11 +30,37 @@ function withTimeout(promise, ms, fallback) {
   return Promise.race([promise, new Promise((resolve) => setTimeout(() => resolve(fallback), ms))]);
 }
 
+// getUser() is a bare fetch: no timeout (RN's fetch has none), and it throws
+// on a network error. Unguarded, a slow/hung server strands the spinner for
+// as long as the socket stays open, and a throw kills the launch IIFE before
+// it ever sets a route — spinner forever. null = no verdict; callers treat it
+// like "not authenticated" and move on to the next recovery step.
+const USER_CHECK_TIMEOUT_MS = 12000;
+async function checkUser() {
+  try {
+    return await withTimeout(getUser(), USER_CHECK_TIMEOUT_MS, null);
+  } catch (_) {
+    return null;
+  }
+}
+
+// The launch recovery chain below, in order. 'recheck' only runs when the
+// headless refresh succeeds — on failure it's dropped from the list and the
+// chain jumps straight to the WebView replay.
+const LAUNCH_STEPS = [
+  { id: 'check', label: 'בודק התחברות…' },
+  { id: 'refresh', label: 'מחדש התחברות…' },
+  { id: 'recheck', label: 'מאמת התחברות…' },
+  { id: 'webview', label: 'מתחבר מחדש לפורטל…' },
+];
+
 export default function RootNavigator() {
   const { accentColor } = useTheme();
   const [initialRoute, setInitialRoute] = useState(null);
   const [isCommander, setIsCommander] = useState(false);
   const [silentRefreshing, setSilentRefreshing] = useState(false);
+  const [steps, setSteps] = useState(LAUNCH_STEPS);
+  const [phase, setPhase] = useState('check');
   const headlessResultRef = useRef(null);
 
   const onAuthenticated = useCallback((user) => {
@@ -48,7 +75,7 @@ export default function RootNavigator() {
 
   useEffect(() => {
     (async () => {
-      const user = await getUser();
+      const user = await checkUser();
       if (user?.isUserAuth) {
         onAuthenticated(user);
         return;
@@ -63,6 +90,7 @@ export default function RootNavigator() {
       // force it onto a slower path that can miss its 30s timeout — even
       // though the headless path succeeds instantly with the same Azure
       // session.
+      setPhase('refresh');
       const headless = await withTimeout(refreshAppCookie(), HEADLESS_REFRESH_TIMEOUT_MS, {
         ok: false,
         attempted: true,
@@ -70,7 +98,8 @@ export default function RootNavigator() {
       });
 
       if (headless.ok) {
-        const refreshed = await getUser();
+        setPhase('recheck');
+        const refreshed = await checkUser();
         if (refreshed?.isUserAuth) {
           recordLaunchRefresh({ resolvedVia: 'headless', headless: { ok: true }, webview: null }).catch(() => {});
           onAuthenticated(refreshed);
@@ -79,6 +108,8 @@ export default function RootNavigator() {
       }
 
       headlessResultRef.current = { ok: false, reason: headless.ok ? 're-check-failed' : headless.reason };
+      if (!headless.ok) setSteps((prev) => prev.filter((s) => s.id !== 'recheck'));
+      setPhase('webview');
       setSilentRefreshing(true);
     })();
   }, [onAuthenticated]);
@@ -106,6 +137,9 @@ export default function RootNavigator() {
         }}
       >
         <ActivityIndicator color={accentColor} size="large" />
+        <View style={{ marginTop: spacing.md, alignSelf: 'stretch' }}>
+          <LaunchSteps steps={steps} currentId={phase} accentColor={accentColor} />
+        </View>
         {silentRefreshing && (
           <SessionRefreshWebView
             onSuccess={(user) => {

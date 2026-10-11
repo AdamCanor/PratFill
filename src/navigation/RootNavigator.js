@@ -34,7 +34,7 @@ function withTimeout(promise, ms, fallback) {
 // as long as the socket stays open, and a throw kills the launch IIFE before
 // it ever sets a route — spinner forever. null = no verdict; callers treat it
 // like "not authenticated" and move on to the next recovery step.
-const USER_CHECK_TIMEOUT_MS = 6000;
+const USER_CHECK_TIMEOUT_MS = 12000;
 async function checkUser() {
   try {
     return await withTimeout(getUser(), USER_CHECK_TIMEOUT_MS, null);

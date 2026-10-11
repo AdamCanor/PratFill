@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, ActivityIndicator, Text } from 'react-native';
+import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
@@ -14,6 +14,7 @@ import SettingsDevScreen from '../screens/SettingsDevScreen';
 import TestConnectionScreen from '../screens/TestConnectionScreen';
 import { getUser, refreshAppCookie, refreshStatuses } from '../api/doch1';
 import SessionRefreshWebView from '../components/SessionRefreshWebView';
+import LaunchSteps from '../components/LaunchSteps';
 import { recordLaunchRefresh } from '../utils/launchRefreshLog';
 import { colors, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
@@ -43,18 +44,23 @@ async function checkUser() {
   }
 }
 
-const PHASE_LABELS = {
-  checking: 'בודק התחברות…',
-  refreshing: 'מחדש התחברות…',
-  webview: 'מתחבר מחדש לפורטל…',
-};
+// The launch recovery chain below, in order. 'recheck' only runs when the
+// headless refresh succeeds — on failure it's dropped from the list and the
+// chain jumps straight to the WebView replay.
+const LAUNCH_STEPS = [
+  { id: 'check', label: 'בודק התחברות…' },
+  { id: 'refresh', label: 'מחדש התחברות…' },
+  { id: 'recheck', label: 'מאמת התחברות…' },
+  { id: 'webview', label: 'מתחבר מחדש לפורטל…' },
+];
 
 export default function RootNavigator() {
   const { accentColor } = useTheme();
   const [initialRoute, setInitialRoute] = useState(null);
   const [isCommander, setIsCommander] = useState(false);
   const [silentRefreshing, setSilentRefreshing] = useState(false);
-  const [phase, setPhase] = useState('checking');
+  const [steps, setSteps] = useState(LAUNCH_STEPS);
+  const [phase, setPhase] = useState('check');
   const headlessResultRef = useRef(null);
 
   const onAuthenticated = useCallback((user) => {
@@ -84,7 +90,7 @@ export default function RootNavigator() {
       // force it onto a slower path that can miss its 30s timeout — even
       // though the headless path succeeds instantly with the same Azure
       // session.
-      setPhase('refreshing');
+      setPhase('refresh');
       const headless = await withTimeout(refreshAppCookie(), HEADLESS_REFRESH_TIMEOUT_MS, {
         ok: false,
         attempted: true,
@@ -92,6 +98,7 @@ export default function RootNavigator() {
       });
 
       if (headless.ok) {
+        setPhase('recheck');
         const refreshed = await checkUser();
         if (refreshed?.isUserAuth) {
           recordLaunchRefresh({ resolvedVia: 'headless', headless: { ok: true }, webview: null }).catch(() => {});
@@ -101,6 +108,7 @@ export default function RootNavigator() {
       }
 
       headlessResultRef.current = { ok: false, reason: headless.ok ? 're-check-failed' : headless.reason };
+      if (!headless.ok) setSteps((prev) => prev.filter((s) => s.id !== 'recheck'));
       setPhase('webview');
       setSilentRefreshing(true);
     })();
@@ -129,9 +137,9 @@ export default function RootNavigator() {
         }}
       >
         <ActivityIndicator color={accentColor} size="large" />
-        <Text style={{ color: colors.textMuted, marginTop: spacing.md, fontSize: 14 }}>
-          {PHASE_LABELS[phase]}
-        </Text>
+        <View style={{ marginTop: spacing.md, alignSelf: 'stretch' }}>
+          <LaunchSteps steps={steps} currentId={phase} accentColor={accentColor} />
+        </View>
         {silentRefreshing && (
           <SessionRefreshWebView
             onSuccess={(user) => {

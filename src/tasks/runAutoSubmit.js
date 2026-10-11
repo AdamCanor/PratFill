@@ -46,17 +46,25 @@ export async function getAutoSubmitCoverage() {
 // ahead, and notify at most once per death (flag cleared on the next
 // successful run). This is the single gate for every session-failure
 // notification the worker sends — the dedup below is part of it.
+//
+// The dedup remembers which kind was sent: a "couldn't reach the server"
+// notice must not swallow a later "login expired" one, or a user who shrugged
+// off the network notice would never hear that they actually need to log in.
+// So a transient notice allows exactly one follow-up real-auth notice.
 const COVERAGE_AT_RISK_MS = 2 * 24 * 60 * 60 * 1000;
 
-export async function shouldNotifyAuthFailure() {
-  if (await AsyncStorage.getItem(AUTH_NOTIFIED_KEY)) return false;
+export async function shouldNotifyAuthFailure({ transient = false } = {}) {
+  const notified = await AsyncStorage.getItem(AUTH_NOTIFIED_KEY);
+  // Anything but 'transient' (incl. the legacy ISO-timestamp value) means a
+  // real-auth notice already went out for this death.
+  if (notified && (notified !== 'transient' || transient)) return false;
   const coverage = await getAutoSubmitCoverage();
   if (!coverage?.coveredThrough) return true;
   return Date.parse(coverage.coveredThrough) - Date.now() < COVERAGE_AT_RISK_MS;
 }
 
-export async function markAuthFailureNotified() {
-  await AsyncStorage.setItem(AUTH_NOTIFIED_KEY, new Date().toISOString());
+export async function markAuthFailureNotified({ transient = false } = {}) {
+  await AsyncStorage.setItem(AUTH_NOTIFIED_KEY, transient ? 'transient' : 'auth');
 }
 
 // State-notification cadence. Every successful run reports where the week

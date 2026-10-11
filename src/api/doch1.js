@@ -558,7 +558,10 @@ async function trySsoSilent(rt) {
   if (!query.code) {
     return {
       ok: false,
-      reason: `authorize-no-code: error=${query.error || 'unknown'} desc=${(query.error_description || '').slice(0, 160)} finalUrl=${finalUrl.slice(0, 200)} | ${cookieSummary}`,
+      reason: `authorize-no-code: status=${authRes?.status} error=${query.error || 'unknown'} desc=${(query.error_description || '').slice(0, 160)} finalUrl=${finalUrl.slice(0, 200)} | ${cookieSummary}`,
+      // Azure's own error page (outage/throttling) carries neither a code nor
+      // an error param — no verdict on the login, so the stored token stays.
+      transient: authRes?.status >= 500 || authRes?.status === 429,
     };
   }
   // Bind the redirect to our request: reject a code that came back with a

@@ -63,9 +63,10 @@ try {
       // actually at risk (or was never established) — shouldNotifyAuthFailure
       // owns that judgement, plus the once-per-death dedup — and never more
       // than one notification a day overall.
-      if ((await shouldNotifyAuthFailure()) && (await canSendNotificationToday())) {
-        await notifySessionProblem({ transient: session.transient });
-        await markAuthFailureNotified();
+      const transient = Boolean(session.transient);
+      if ((await shouldNotifyAuthFailure({ transient })) && (await canSendNotificationToday())) {
+        await notifySessionProblem({ transient });
+        await markAuthFailureNotified({ transient });
         await markNotificationSent();
       }
       return BackgroundTask.BackgroundTaskResult.Failed;
@@ -73,9 +74,9 @@ try {
       // AuthError thrown mid-submit despite a fresh session — treat like a
       // death, throttled the same conservative way.
       if (e instanceof AuthError) {
-        if ((await shouldNotifyAuthFailure()) && (await canSendNotificationToday())) {
+        if ((await shouldNotifyAuthFailure({ transient: false })) && (await canSendNotificationToday())) {
           await notifySessionProblem({ transient: false });
-          await markAuthFailureNotified();
+          await markAuthFailureNotified({ transient: false });
           await markNotificationSent();
         }
         return BackgroundTask.BackgroundTaskResult.Failed;

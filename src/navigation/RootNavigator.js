@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Text } from 'react-native';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
@@ -15,7 +15,7 @@ import TestConnectionScreen from '../screens/TestConnectionScreen';
 import { getUser, refreshAppCookie, refreshStatuses } from '../api/doch1';
 import SessionRefreshWebView from '../components/SessionRefreshWebView';
 import { recordLaunchRefresh } from '../utils/launchRefreshLog';
-import { colors } from '../theme';
+import { colors, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator();
@@ -29,11 +29,32 @@ function withTimeout(promise, ms, fallback) {
   return Promise.race([promise, new Promise((resolve) => setTimeout(() => resolve(fallback), ms))]);
 }
 
+// getUser() is a bare fetch: no timeout (RN's fetch has none), and it throws
+// on a network error. Unguarded, a slow/hung server strands the spinner for
+// as long as the socket stays open, and a throw kills the launch IIFE before
+// it ever sets a route — spinner forever. null = no verdict; callers treat it
+// like "not authenticated" and move on to the next recovery step.
+const USER_CHECK_TIMEOUT_MS = 6000;
+async function checkUser() {
+  try {
+    return await withTimeout(getUser(), USER_CHECK_TIMEOUT_MS, null);
+  } catch (_) {
+    return null;
+  }
+}
+
+const PHASE_LABELS = {
+  checking: 'בודק התחברות…',
+  refreshing: 'מחדש התחברות…',
+  webview: 'מתחבר מחדש לפורטל…',
+};
+
 export default function RootNavigator() {
   const { accentColor } = useTheme();
   const [initialRoute, setInitialRoute] = useState(null);
   const [isCommander, setIsCommander] = useState(false);
   const [silentRefreshing, setSilentRefreshing] = useState(false);
+  const [phase, setPhase] = useState('checking');
   const headlessResultRef = useRef(null);
 
   const onAuthenticated = useCallback((user) => {
@@ -48,7 +69,7 @@ export default function RootNavigator() {
 
   useEffect(() => {
     (async () => {
-      const user = await getUser();
+      const user = await checkUser();
       if (user?.isUserAuth) {
         onAuthenticated(user);
         return;
@@ -63,6 +84,7 @@ export default function RootNavigator() {
       // force it onto a slower path that can miss its 30s timeout — even
       // though the headless path succeeds instantly with the same Azure
       // session.
+      setPhase('refreshing');
       const headless = await withTimeout(refreshAppCookie(), HEADLESS_REFRESH_TIMEOUT_MS, {
         ok: false,
         attempted: true,
@@ -70,7 +92,7 @@ export default function RootNavigator() {
       });
 
       if (headless.ok) {
-        const refreshed = await getUser();
+        const refreshed = await checkUser();
         if (refreshed?.isUserAuth) {
           recordLaunchRefresh({ resolvedVia: 'headless', headless: { ok: true }, webview: null }).catch(() => {});
           onAuthenticated(refreshed);
@@ -79,6 +101,7 @@ export default function RootNavigator() {
       }
 
       headlessResultRef.current = { ok: false, reason: headless.ok ? 're-check-failed' : headless.reason };
+      setPhase('webview');
       setSilentRefreshing(true);
     })();
   }, [onAuthenticated]);
@@ -106,6 +129,9 @@ export default function RootNavigator() {
         }}
       >
         <ActivityIndicator color={accentColor} size="large" />
+        <Text style={{ color: colors.textMuted, marginTop: spacing.md, fontSize: 14 }}>
+          {PHASE_LABELS[phase]}
+        </Text>
         {silentRefreshing && (
           <SessionRefreshWebView
             onSuccess={(user) => {

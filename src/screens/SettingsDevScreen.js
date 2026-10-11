@@ -28,6 +28,9 @@ function describeLastRun(lastRun) {
   if (lastRun.error) return `${time} — שגיאה`;
   if (lastRun.skipped) return `${time} — לא בוצעה פעולה (${lastRun.reason})`;
   if (lastRun.count > 0) return `${time} — נוספו דיווחים ל-${lastRun.count} ימים`;
+  if (lastRun.total && lastRun.reported < lastRun.total) {
+    return `${time} — ${lastRun.reported} מתוך ${lastRun.total} הימים הקרובים מדווחים`;
+  }
   return `${time} — כל הימים כבר מדווחים`;
 }
 

@@ -36,8 +36,8 @@ export default function SettingsAutoSubmitScreen({ navigation }) {
   }, []);
 
   const NOTIFY_OPTIONS = [
-    { id: 'daily', label: 'כל יום', meta: 'התראה בכל פעם שנוספו דיווחים' },
-    { id: 'weekly', label: 'פעם בשבוע', meta: 'לכל היותר התראת הצלחה אחת בשבוע' },
+    { id: 'daily', label: 'כל יום', meta: 'עדכון יומי על מצב השבוע הקרוב' },
+    { id: 'weekly', label: 'פעם בשבוע', meta: 'לכל היותר עדכון מצב אחד בשבוע' },
   ];
 
   const onSave = async () => {
@@ -88,7 +88,7 @@ export default function SettingsAutoSubmitScreen({ navigation }) {
               activeOpacity={0.7}
             >
               <View style={{ flex: 1, marginEnd: spacing.sm }}>
-                <Text style={styles.rowLabel}>התראות הצלחה</Text>
+                <Text style={styles.rowLabel}>עדכוני מצב</Text>
                 <Text style={styles.rowMeta}>
                   {NOTIFY_OPTIONS.find((o) => o.id === autoSubmit.successNotify)?.label || 'כל יום'}
                 </Text>
@@ -97,7 +97,8 @@ export default function SettingsAutoSubmitScreen({ navigation }) {
             </TouchableOpacity>
 
             <Text style={styles.hint}>
-              התראה על כישלון התחברות (צורך בהתחברות מחדש) תישלח תמיד.
+              עדכון המצב נשלח בכל הרצה מוצלחת, גם כשכל הימים כבר מדווחים.
+              התראה על בעיית התחברות תישלח רק כשהימים המדווחים עומדים להיגמר.
             </Text>
           </>
         )}
@@ -158,7 +159,7 @@ export default function SettingsAutoSubmitScreen({ navigation }) {
       >
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => setNotifyModalVisible(false)} />
         <View style={styles.modalSheet}>
-          <Text style={styles.modalTitle}>תדירות התראות הצלחה</Text>
+          <Text style={styles.modalTitle}>תדירות עדכוני מצב</Text>
           {NOTIFY_OPTIONS.map((o) => (
             <TouchableOpacity
               key={o.id}
